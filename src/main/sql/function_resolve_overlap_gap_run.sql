@@ -149,7 +149,7 @@ BEGIN
     END LOOP;
     
 
-    RAISE EXCEPTION 'resolve_overlap_gap_run db_conn_status %', db_conn_status;
+    RAISE NOTICE 'resolve_overlap_gap_run db_conn_status %', db_conn_status;
 
     -- For job jobtype on we have to check that all data are saved to the database
     IF cell_job_type = 1 THEN
