@@ -117,13 +117,13 @@ BEGIN
     command_string := Format('SELECT topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L) FROM (
                   SELECT geom from  %2$s.edge) as r', _snap_tolerance, border_topo_info.topology_name, ST_ExteriorRing (bb), _topology_name, _table_name_result_prefix);
     --RAISE NOTICE 'command_string %', command_string;
-    EXECUTE command_string;
+    --EXECUTE command_string;
     -- analyze table topo_ar5_forest_sysdata.face;
     -- remove small polygons in main table
     --              num_rows_removed := topo_update.do_remove_small_areas_no_block(border_topo_info.topology_name,'topo_ar5_forest_sysdata.face' ,'mbr','face_id',_job_list_name ,bb );
     --              RAISE NOTICE 'Removed % small polygons in face_table_name %', num_rows_removed, 'topo_ar5_forest_sysdata.face';
-    COMMIT;
-    PERFORM topology.DropTopology (border_topo_info.topology_name);
+    --COMMIT;
+    --PERFORM topology.DropTopology (border_topo_info.topology_name);
   ELSIF _cell_job_type = 2 THEN
     -- on cell border
     -- test with  area to block like bb
