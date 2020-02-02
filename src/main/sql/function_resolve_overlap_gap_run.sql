@@ -51,7 +51,7 @@ DECLARE
   _min_area_to_keep float = 49.0;
   
   -- job loop counter
-  job_loop_counter int = 1;
+  job_loop_counter int = 0;
   
   -- used to run a single background thread to save data to the master topology schema
   db_conn_status int;
@@ -85,7 +85,7 @@ BEGIN
 
   -- set up backgroun connection
   db := current_database();
-  db_conn := 'conntestaaa';
+  db_conn := 'conn'||_topology_name;
   db_connstr := 'dbname='||db;
 
 
@@ -105,34 +105,20 @@ BEGIN
     -- start a job to save data agains the master job thread is slow
     -- TODO But is good programming to use a separate thread to avoid to musch MVC ????????????????
     
-    IF job_loop_counter = 1 and cell_job_type = 1 THEN
-      RAISE NOTICE 'perform dblink_connect db_conn %', db_conn;
-
-     perform dblink_connect(db_conn, db_connstr);
-      -- 'test_topo_jm',0.000001,'test_topo_jm.jm_ukomm_flate_problem'
-      command_string := Format('CALL resolve_overlap_gap_save_single_cells(%L,%s,%L)',_topology_name, snap_tolerance, table_name_result_prefix );
-      -- Start job to save to master schema
-
-      perform dblink_send_query(db_conn, command_string);
-      -- 
-    END IF;
     
-    job_loop_counter := job_loop_counter + 1;
-
+    
     LOOP
     
+      job_loop_counter := job_loop_counter + 1;
+
       command_string := Format('SELECT ARRAY(SELECT sql_to_run as func_call FROM %s WHERE block_bb is null ORDER BY md5(cell_geo::Text) desc)', job_list_name);
       RAISE NOTICE 'resolve_overlap_gap_run command_string %', command_string;			
       EXECUTE command_string INTO stmts;
       
       -- For job jobtype on we have to check that all data are saved to the database
-      IF cell_job_type = 1 THEN
-         select dblink_is_busy(db_conn) into db_conn_status;
-         
-         IF (db_conn_status = 1) THEN
-		  	RAISE NOTICE 'resolve_overlap_gap_run sleep at to wait for saving to master to topo schema ';
-		  	perform pg_sleep(1);
-         END IF;
+      IF cell_job_type = 1 AND job_loop_counter = 1 THEN
+         command_string := Format('CALL resolve_overlap_gap_save_single_cells(%L,%s,%L)',_topology_name, 0, table_name_result_prefix );
+         stmts := ARRAY[command_string]||stmts;
       END IF;
       
       EXIT
@@ -149,12 +135,6 @@ BEGIN
     END LOOP;
     
 
-    RAISE NOTICE 'resolve_overlap_gap_run db_conn_status %', db_conn_status;
-
-    -- For job jobtype on we have to check that all data are saved to the database
-    IF cell_job_type = 1 THEN
-      perform dblink_disconnect(db_conn);
-    END IF;
 
     
   END LOOP;

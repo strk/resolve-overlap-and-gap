@@ -24,7 +24,7 @@ BEGIN
   -- check total number og jobs to wait for
   command_string := Format('SELECT count(*) from %s as gt', job_list_name);
   EXECUTE command_string INTO num_jobs;
-  RAISE NOTICE 'num_jobs is % ', num_jobs;
+  RAISE NOTICE ' starting to handle num_jobs is % ', num_jobs;
 
   LOOP
     --	execute command_string;
@@ -34,6 +34,9 @@ BEGIN
       last_done_id := next_job;
       num_jobs_done := num_jobs_done + 1;
       box_id := next_job;
+      
+      RAISE NOTICE ' start job with box_id = %  ', box_id;
+
       jobs_done_list = jobs_done_list || ',' || next_job::Varchar;
       command_string := Format('SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = %L)', _topology_name || '_' || box_id);
       EXECUTE command_string INTO topo_exist;
@@ -62,11 +65,17 @@ BEGIN
       RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
       PERFORM Pg_sleep(1);
     END IF;
+
+    
+    RAISE NOTICE ' num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
+
     EXIT
     WHEN num_jobs_done = num_jobs;
-    RAISE NOTICE ' num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
     
   END LOOP;
+  
+  RAISE NOTICE ' done to handle num_jobs is % ', num_jobs;
+
 END
 $$;
 
