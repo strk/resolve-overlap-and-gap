@@ -44,7 +44,7 @@ BEGIN
   RAISE NOTICE 'command_string %', command_string;
   EXECUTE command_string;
 
-  sql_to_run_grid := Format('CALL resolve_overlap_gap_single_cell(%s,%s,%s,
+  sql_to_run_grid := Format('Select resolve_overlap_gap_single_cell(%s,%s,%s,
   %s,%s,%s,%s,
   %s,%s,%s,
   %s,%s,%s,', 

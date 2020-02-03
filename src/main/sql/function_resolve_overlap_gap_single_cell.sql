@@ -1,5 +1,5 @@
-CREATE OR REPLACE PROCEDURE resolve_overlap_gap_single_cell (input_table_name character varying, input_table_geo_column_name character varying, input_table_pk_column_name character varying, _table_name_result_prefix varchar, _topology_name character varying, _srid int, _utm boolean, _simplify_tolerance double precision, _snap_tolerance double precision, _do_chaikins boolean, _min_area_to_keep float, _job_list_name character varying, overlapgap_grid varchar, bb geometry, _cell_job_type int -- add lines 1 inside cell, 2 boderlines, 3 exract simple
-)
+CREATE OR REPLACE FUNCTION resolve_overlap_gap_single_cell (input_table_name character varying, input_table_geo_column_name character varying, input_table_pk_column_name character varying, _table_name_result_prefix varchar, _topology_name character varying, _srid int, _utm boolean, _simplify_tolerance double precision, _snap_tolerance double precision, _do_chaikins boolean, _min_area_to_keep float, _job_list_name character varying, overlapgap_grid varchar, bb geometry, _cell_job_type int -- add lines 1 inside cell, 2 boderlines, 3 exract simple
+) RETURNS void
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -125,9 +125,10 @@ BEGIN
     -- remove small polygons in main table
     --              num_rows_removed := topo_update.do_remove_small_areas_no_block(border_topo_info.topology_name,'topo_ar5_forest_sysdata.face' ,'mbr','face_id',_job_list_name ,bb );
     --              RAISE NOTICE 'Removed % small polygons in face_table_name %', num_rows_removed, 'topo_ar5_forest_sysdata.face';
-    COMMIT;
-    PERFORM topology.DropTopology (border_topo_info.topology_name);
+    
+    
   ELSIF _cell_job_type = 2 THEN
+    
     -- on cell border
     -- test with  area to block like bb
     -- area_to_block := bb;
@@ -205,6 +206,8 @@ BEGIN
     EXECUTE command_string;
     -- Drop/Create a temp to hold data temporay for job
     EXECUTE Format('DROP TABLE IF EXISTS %s', temp_table_name);
+  ELSIF _cell_job_type = 4 THEN
+    PERFORM topology.DropTopology (_topology_name || '_' || box_id);
   ELSE
     RAISE EXCEPTION 'Invalid _cell_job_type % ', _cell_job_type;
   END IF;

@@ -8,7 +8,7 @@ _utm boolean, _topology_name varchar, -- The topology schema name where we store
 _tolerance double precision, -- this is tolerance used as base when creating the the top layer
 _max_parallel_jobs int, -- this is the max number of paralell jobs to run. There must be at least the same number of free connections
 _max_rows_in_each_cell int -- this is the max number rows that intersects with box before it's split into 4 new boxes, default is 5000
-)
+) 
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -49,6 +49,13 @@ DECLARE
   -- TODO add a paarameter
   _do_chaikins boolean = FALSE;
   _min_area_to_keep float = 49.0;
+  
+  v_state text;
+  v_msg text;
+  v_detail text;
+  v_hint text;
+  v_context text;
+
 BEGIN
   table_name_result_prefix := _topology_name || Substring(_table_to_resolve FROM (Position('.' IN _table_to_resolve)));
   -- This is table name prefix including schema used for the result tables
@@ -65,13 +72,27 @@ BEGIN
   -- Call init method to create content based create and main topology schema
   command_string := Format('SELECT resolve_overlap_gap_init(%L,%s,%s,%s,%s,%s,%s,%s)', table_name_result_prefix, Quote_literal(_table_to_resolve), Quote_literal(_table_geo_collumn_name), _table_srid, _max_rows_in_each_cell, Quote_literal(overlapgap_grid), Quote_literal(_topology_name), snap_tolerance);
   -- execute the string
-  EXECUTE command_string INTO num_cells;
-  FOR cell_job_type IN 1..3 LOOP
+  --EXECUTE command_string INTO num_cells;
+  
+  SELECT ARRAY[command_string] into stmts;
+  SELECT execute_parallel (stmts, 1) INTO call_result;
+  IF (call_result = FALSE) THEN
+    RAISE EXCEPTION 'Failed to run resolve_overlap_gap_init for % with the following statement list %', _table_to_resolve, stmts;
+  END IF;
+  
+  FOR cell_job_type IN 1..4 LOOP
     -- 1 ############################# START # add lines inside box and cut lines and save then in separate table,
     -- 2 ############################# START # add border lines saved in last run, we will here connect data from the different cell using he border lines.
     command_string := Format('SELECT resolve_overlap_gap_job_list(%L,%L,%s,%L,%L,%L,%L,%L,%L,%s,%s,%L,%L,%s)', _table_to_resolve, _table_geo_collumn_name, _table_srid, _utm, overlapgap_grid, table_name_result_prefix, _topology_name, job_list_name, _table_pk_column_name, simplify_tolerance, snap_tolerance, _do_chaikins, _min_area_to_keep, cell_job_type);
-    EXECUTE command_string;
-    COMMIT;
+    --EXECUTE command_string;
+    
+    
+    SELECT ARRAY[command_string] into stmts;
+    SELECT execute_parallel (stmts, 1) INTO call_result;
+    IF (call_result = FALSE) THEN
+      RAISE EXCEPTION 'Failed to run resolve_overlap_gap_job_list for % with the following statement list %', _table_to_resolve, stmts;
+    END IF;
+    
     LOOP
       command_string := Format('SELECT ARRAY(SELECT sql_to_run as func_call FROM %s WHERE block_bb is null ORDER BY md5(cell_geo::Text) desc)', job_list_name);
       RAISE NOTICE 'command_string %', command_string;
@@ -85,6 +106,10 @@ BEGIN
         RAISE EXCEPTION 'Failed to run overlap and gap for % with the following statement list %', _table_to_resolve, stmts;
       END IF;
     END LOOP;
+
+    commit;
+    
+
   END LOOP;
 END
 $$;
