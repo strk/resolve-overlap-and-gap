@@ -29,18 +29,11 @@ DECLARE
   sql_to_run_grid varchar;
 BEGIN
   -- ############################# START # create jobList tables
-  command_string := Format('DROP table if exists %s', job_list_name_);
-  RAISE NOTICE 'command_string %', command_string;
-  EXECUTE command_string;
-  command_string := Format('CREATE unlogged table %s(id serial, start_time timestamp with time zone, sql_to_block varchar, sql_to_run varchar, cell_geo geometry(geometry,%s),block_bb Geometry(geometry,%s))',
-  job_list_name_,_srid,_srid);
+  command_string := Format('DELETE FROM %s', job_list_name_);
   RAISE NOTICE 'command_string %', command_string;
   EXECUTE command_string;
   -- create a table for don jobs
-  command_string := Format('DROP table if exists %s', job_list_name_ || '_donejobs');
-  RAISE NOTICE 'command_string %', command_string;
-  EXECUTE command_string;
-  command_string := Format('CREATE unlogged table %s(id int, done_time timestamp with time zone default clock_timestamp())', job_list_name_ || '_donejobs');
+  command_string := Format('DELETE FROM %s', job_list_name_ || '_donejobs');
   RAISE NOTICE 'command_string %', command_string;
   EXECUTE command_string;
 
@@ -60,8 +53,8 @@ BEGIN
   -- add inside cell polygons
   -- TODO solve how to find r.geom
   command_string := Format('
- 	INSERT INTO %s(sql_to_run,cell_geo,sql_to_block) 
- 	SELECT 
+ 	INSERT INTO %s(id,sql_to_run,cell_geo,sql_to_block) 
+ 	SELECT  row_number() OVER () as id,
     %s||quote_literal(r.'||geo_collumn_name_||'::Varchar)||%s as sql_to_run, 
     r.'||geo_collumn_name_||' as cell_geo, 
     %s||quote_literal(r.'||geo_collumn_name_||'::Varchar)||%s as sql_to_block
@@ -72,18 +65,6 @@ BEGIN
  	Quote_literal(sql_to_block_cmd), 
  	Quote_literal(');'), 
  	overlapgap_grid_);
-  RAISE NOTICE 'command_string %', command_string;
-  EXECUTE command_string;
-  command_string := Format('CREATE INDEX ON %s USING GIST (cell_geo);', job_list_name_);
-  RAISE NOTICE 'command_string %', command_string;
-  EXECUTE command_string;
-  command_string := Format('CREATE INDEX ON %s USING GIST (block_bb);', job_list_name_);
-  RAISE NOTICE 'command_string %', command_string;
-  EXECUTE command_string;
-  command_string := Format('CREATE INDEX ON %s (id);', job_list_name_);
-  RAISE NOTICE 'command_string %', command_string;
-  EXECUTE command_string;
-  command_string := Format('CREATE INDEX ON %s (id);', job_list_name_ || '_donejobs');
   RAISE NOTICE 'command_string %', command_string;
   EXECUTE command_string;
 END;

@@ -9,7 +9,8 @@ _srid int, -- the srid for the given geo column on the table analyze
 _max_rows_in_each_cell int, -- this is the max number rows that intersects with box before it's split into 4 new boxes
 _overlapgap_grid varchar, -- The schema.table name of the grid that will be created and used to break data up in to managle pieces
 _topology_schema_name varchar, -- The topology schema name where we store store result sufaces and lines from the simple feature dataset,
-_snap_tolerance double precision
+_snap_tolerance double precision,
+_job_list_name varchar
 )
   RETURNS INTEGER
   AS $$
@@ -109,6 +110,36 @@ EXECUTE Format('CREATE UNLOGGED TABLE %s AS TABLE %s with NO DATA',_table_name_r
 
 -- Add an extra column to hold a list of other intersections surfaces
 EXECUTE Format('ALTER TABLE %s ADD column _other_intersect_id_list int[]',_table_name_result_prefix||'_result');
+
+
+-- ############################# START # create jobList tables
+  command_string := Format('DROP table if exists %s', _job_list_name);
+  RAISE NOTICE 'command_string %', command_string;
+  EXECUTE command_string;
+  command_string := Format('CREATE unlogged table %s(id int, start_time timestamp with time zone, sql_to_block varchar, sql_to_run varchar, cell_geo geometry(geometry,%s),block_bb Geometry(geometry,%s))',
+  _job_list_name,_srid,_srid);
+  RAISE NOTICE 'command_string %', command_string;
+  EXECUTE command_string;
+  -- create a table for don jobs
+  command_string := Format('DROP table if exists %s', _job_list_name || '_donejobs');
+  RAISE NOTICE 'command_string %', command_string;
+  EXECUTE command_string;
+  command_string := Format('CREATE unlogged table %s(id int, done_time timestamp with time zone default clock_timestamp())', _job_list_name || '_donejobs');
+  RAISE NOTICE 'command_string %', command_string;
+  EXECUTE command_string;
+
+    command_string := Format('CREATE INDEX ON %s USING GIST (cell_geo);', _job_list_name);
+  RAISE NOTICE 'command_string %', command_string;
+  EXECUTE command_string;
+  command_string := Format('CREATE INDEX ON %s USING GIST (block_bb);', _job_list_name);
+  RAISE NOTICE 'command_string %', command_string;
+  EXECUTE command_string;
+  command_string := Format('CREATE INDEX ON %s (id);', _job_list_name);
+  RAISE NOTICE 'command_string %', command_string;
+  EXECUTE command_string;
+  command_string := Format('CREATE INDEX ON %s (id);', _job_list_name || '_donejobs');
+  RAISE NOTICE 'command_string %', command_string;
+  EXECUTE command_string;
 
   RETURN num_cells;
 END;

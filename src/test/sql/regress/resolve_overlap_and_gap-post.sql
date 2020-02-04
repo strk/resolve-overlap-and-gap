@@ -1,6 +1,6 @@
 drop schema test_data cascade;
 
-DROP PROCEDURE IF EXISTS resolve_overlap_gap_start(
+DROP FUNCTION IF EXISTS resolve_overlap_gap_start(
 _table_to_resolve varchar, -- The table to resolv, imcluding schema name
 _table_pk_column_name varchar, -- The primary of the input table
 _table_geo_collumn_name varchar, -- the name of geometry column on the table to analyze
@@ -21,7 +21,8 @@ _srid int, -- the srid for the given geo column on the table analyze
 _max_rows_in_each_cell int, -- this is the max number rows that intersects with box before it's split into 4 new boxes
 _overlapgap_grid varchar, -- The schema.table name of the grid that will be created and used to break data up in to managle pieces
 _topology_schema_name varchar, -- The topology schema name where we store store result sufaces and lines from the simple feature dataset,
-_snap_tolerance double precision
+_snap_tolerance double precision,
+_job_list_name varchar
 );
 
 DROP FUNCTION IF EXISTS resolve_overlap_gap_run(

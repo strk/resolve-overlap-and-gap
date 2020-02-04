@@ -1,5 +1,5 @@
 -- This is the main funtion used resolve overlap and gap
-CREATE OR REPLACE PROCEDURE resolve_overlap_gap_start (_table_to_resolve varchar, -- The table to resolv, imcluding schema name
+CREATE OR REPLACE FUNCTION resolve_overlap_gap_start (_table_to_resolve varchar, -- The table to resolv, imcluding schema name
 _table_pk_column_name varchar, -- The primary of the input table
 _table_geo_collumn_name varchar, -- the name of geometry column on the table to analyze
 _table_srid int, -- the srid for the given geo column on the table analyze
@@ -8,7 +8,7 @@ _utm boolean, _topology_name varchar, -- The topology schema name where we store
 _tolerance double precision, -- this is tolerance used as base when creating the the top layer
 _max_parallel_jobs int, -- this is the max number of paralell jobs to run. There must be at least the same number of free connections
 _max_rows_in_each_cell int -- this is the max number rows that intersects with box before it's split into 4 new boxes, default is 5000
-) LANGUAGE plpgsql
+) RETURNS void LANGUAGE plpgsql
 AS $$
 DECLARE
   command_string text;
@@ -69,7 +69,7 @@ BEGIN
   -- the name of job_list table, this table is ued to track of done jobs
   job_list_name := table_name_result_prefix || '_job_list';
   -- Call init method to create content based create and main topology schema
-  command_string := Format('SELECT resolve_overlap_gap_init(%L,%s,%s,%s,%s,%s,%s,%s)', table_name_result_prefix, Quote_literal(_table_to_resolve), Quote_literal(_table_geo_collumn_name), _table_srid, _max_rows_in_each_cell, Quote_literal(overlapgap_grid), Quote_literal(_topology_name), snap_tolerance);
+  command_string := Format('SELECT resolve_overlap_gap_init(%L,%s,%s,%s,%s,%s,%s,%s,%L)', table_name_result_prefix, Quote_literal(_table_to_resolve), Quote_literal(_table_geo_collumn_name), _table_srid, _max_rows_in_each_cell, Quote_literal(overlapgap_grid), Quote_literal(_topology_name), snap_tolerance,job_list_name);
   -- execute the string
   --EXECUTE command_string INTO num_cells;
   
@@ -79,32 +79,10 @@ BEGIN
     RAISE EXCEPTION 'Failed to run resolve_overlap_gap_init for % with the following statement list %', _table_to_resolve, stmts;
   END IF;
 
-  COMMIT;
-  
-  cell_job_type := 1;
-  perform resolve_overlap_gap_run(_table_to_resolve, _table_geo_collumn_name, _table_srid, _utm, overlapgap_grid, table_name_result_prefix, _topology_name, job_list_name, _table_pk_column_name, simplify_tolerance, snap_tolerance, _do_chaikins, _min_area_to_keep, cell_job_type, _max_parallel_jobs);
-
-  COMMIT;
-  
-  cell_job_type := 2;
-  perform resolve_overlap_gap_run(_table_to_resolve, _table_geo_collumn_name, _table_srid, _utm, overlapgap_grid, table_name_result_prefix, _topology_name, job_list_name, _table_pk_column_name, simplify_tolerance, snap_tolerance, _do_chaikins, _min_area_to_keep, cell_job_type, _max_parallel_jobs);
-  
-  COMMIT;
-
-  cell_job_type := 3;
-  perform resolve_overlap_gap_run(_table_to_resolve, _table_geo_collumn_name, _table_srid, _utm, overlapgap_grid, table_name_result_prefix, _topology_name, job_list_name, _table_pk_column_name, simplify_tolerance, snap_tolerance, _do_chaikins, _min_area_to_keep, cell_job_type, _max_parallel_jobs);
-
-  COMMIT;
-
-  cell_job_type := 4;
-  perform resolve_overlap_gap_run(_table_to_resolve, _table_geo_collumn_name, _table_srid, _utm, overlapgap_grid, table_name_result_prefix, _topology_name, job_list_name, _table_pk_column_name, simplify_tolerance, snap_tolerance, _do_chaikins, _min_area_to_keep, cell_job_type, _max_parallel_jobs);
-  
-  COMMIT;
-
-  
---  FOR cell_job_type IN 1..4 LOOP
---    perform resolve_overlap_gap_run(_table_to_resolve, _table_geo_collumn_name, _table_srid, _utm, overlapgap_grid, table_name_result_prefix, _topology_name, job_list_name, _table_pk_column_name, simplify_tolerance, snap_tolerance, _do_chaikins, _min_area_to_keep, cell_job_type, _max_parallel_jobs);
---  END LOOP;
+    
+  FOR cell_job_type IN 1..4 LOOP
+    perform resolve_overlap_gap_run(_table_to_resolve, _table_geo_collumn_name, _table_srid, _utm, overlapgap_grid, table_name_result_prefix, _topology_name, job_list_name, _table_pk_column_name, simplify_tolerance, snap_tolerance, _do_chaikins, _min_area_to_keep, cell_job_type, _max_parallel_jobs);
+  END LOOP;
 -- blocked_pid                           | 58067
 --blocked_user                          | lop
 --blocking_pid                          | 58058
