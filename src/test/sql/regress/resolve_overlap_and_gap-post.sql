@@ -1,6 +1,6 @@
 drop schema test_data cascade;
 
-DROP PROCEDURE IF EXISTS resolve_overlap_gap_run(
+DROP PROCEDURE IF EXISTS resolve_overlap_gap_start(
 _table_to_resolve varchar, -- The table to resolv, imcluding schema name
 _table_pk_column_name varchar, -- The primary of the input table
 _table_geo_collumn_name varchar, -- the name of geometry column on the table to analyze
@@ -24,6 +24,25 @@ _topology_schema_name varchar, -- The topology schema name where we store store 
 _snap_tolerance double precision
 );
 
+DROP FUNCTION IF EXISTS resolve_overlap_gap_run(
+-- _table_to_resolve, _table_geo_collumn_name, _table_srid, _utm, 
+_table_to_resolve varchar,
+_table_geo_collumn_name varchar,
+_table_srid int,
+_utm boolean,
+-- _overlapgap_grid, _table_name_result_prefix, _topology_name, job_list_name,
+_overlapgap_grid varchar,
+_table_name_result_prefix varchar,
+_topology_name varchar, 
+_job_list_name varchar,
+-- _table_pk_column_name, _simplify_tolerance, _snap_tolerance, _do_chaikins, _min_area_to_keep, _cell_job_type
+_table_pk_column_name varchar, 
+_simplify_tolerance double precision,
+_snap_tolerance double precision,
+_do_chaikins boolean,
+_min_area_to_keep float,
+_cell_job_type int,
+_max_parallel_jobs int);
 
 DROP FUNCTION IF EXISTS resolve_overlap_gap_job_list(
 table_to_resolve_ varchar, -- The table to resolve
