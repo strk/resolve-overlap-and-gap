@@ -15,7 +15,11 @@ if (-d "../../../../submodule") {
 	
 	# git submodule add --force https://github.com/larsop/postgres_execute_parallel submodule/postgres_execute_parallel
 	# get functions for postgres_execute_parallel
-	for my $file (glob '../../../../submodule/postgres_execute_parallel/src/main/sql/func*') {
+#	for my $file (glob '../../../../submodule/postgres_execute_parallel/src/main/sql/func*') {
+#		copy_file_into($file,$fh_out);
+#	}
+
+	for my $file (glob '/Users/lop/dev/github/postgres_execute_parallel/src/main/sql/func*') {
 		copy_file_into($file,$fh_out);
 	}
 

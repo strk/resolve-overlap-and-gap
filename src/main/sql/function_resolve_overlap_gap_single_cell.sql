@@ -120,14 +120,21 @@ BEGIN
     command_string := Format('SELECT topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L) FROM (
                   SELECT geom from  %2$s.edge) as r', _snap_tolerance, border_topo_info.topology_name, ST_ExteriorRing (bb), _topology_name, _table_name_result_prefix);
     --RAISE NOTICE 'command_string %', command_string;
-    EXECUTE command_string;
+  --  EXECUTE command_string;
     -- analyze table topo_ar5_forest_sysdata.face;
     -- remove small polygons in main table
     --              num_rows_removed := topo_update.do_remove_small_areas_no_block(border_topo_info.topology_name,'topo_ar5_forest_sysdata.face' ,'mbr','face_id',_job_list_name ,bb );
     --              RAISE NOTICE 'Removed % small polygons in face_table_name %', num_rows_removed, 'topo_ar5_forest_sysdata.face';
     
-    
   ELSIF _cell_job_type = 2 THEN
+    command_string := Format('SELECT topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L) FROM (
+                  SELECT geom from  %2$s.edge) as r', _snap_tolerance, _topology_name || '_' || box_id, ST_ExteriorRing (bb), _topology_name, _table_name_result_prefix);
+    --RAISE NOTICE 'command_string %', command_string;
+    EXECUTE command_string;
+  ELSIF _cell_job_type = 3 THEN
+    PERFORM topology.DropTopology (_topology_name || '_' || box_id);
+    
+  ELSIF _cell_job_type = 4 THEN
     
     -- on cell border
     -- test with  area to block like bb
@@ -145,7 +152,7 @@ BEGIN
     -- NB We have to use fixed snap to here to be sure that lines snapp
     command_string := Format('SELECT topo_update.add_border_lines(%1$L,geo,%3$s,%5$L) from topo_update.get_left_over_borders(%4$L,%6$L,%2$L,%5$L)', _topology_name, bb, snap_tolerance_fixed, overlapgap_grid, _table_name_result_prefix, input_table_geo_column_name);
     EXECUTE command_string;
-  ELSIF _cell_job_type = 3 THEN
+  ELSIF _cell_job_type = 5 THEN
     -- Drop/Create a temp to hold data temporay for job
     EXECUTE Format('DROP TABLE IF EXISTS %s', temp_table_name);
     -- Create the temp for result simple feature result table  as copy of the input table
@@ -206,8 +213,6 @@ BEGIN
     EXECUTE command_string;
     -- Drop/Create a temp to hold data temporay for job
     EXECUTE Format('DROP TABLE IF EXISTS %s', temp_table_name);
-  ELSIF _cell_job_type = 4 THEN
-    PERFORM topology.DropTopology (_topology_name || '_' || box_id);
   ELSE
     RAISE EXCEPTION 'Invalid _cell_job_type % ', _cell_job_type;
   END IF;
