@@ -9,8 +9,8 @@ DECLARE
   used_time int;
   num_jobs int = 0;
   num_jobs_done int = 0;
-  last_done_id int = - 1;
-  next_job int = - 1;
+  next_save_job int = - 1;
+  next_createdata_job int = - 1;
   box_id int;
   job_list_name varchar = _table_name_result_prefix || '_job_list';
   topo_exist boolean;
@@ -26,26 +26,48 @@ BEGIN
   RAISE NOTICE ' starting to handle num_jobs is % ', num_jobs;
 
   LOOP
-    --	execute command_string;
-    command_string := Format('select gt.id from %s as gt where start_time_phase_two is null order by done_time limit 1 for update', job_list_name || '_donejobs');
-    EXECUTE command_string INTO next_job;
-    IF next_job IS NOT NULL THEN
-      command_string := Format('update %s set start_time_phase_two = now() where id = %s', job_list_name || '_donejobs', next_job);
-  	  EXECUTE command_string;
-  	  COMMIT;
+
+    BEGIN
+    -- check for new save jobs
+    command_string := Format('UPDATE %1$s 
+    SET  start_time_phase_two = now() 
+    WHERE id = ( SELECT id FROM %1$s  WHERE start_time_phase_two is null LIMIT 1 FOR UPDATE SKIP LOCKED )
+    RETURNING id', job_list_name || '_donejobs');
+    EXECUTE command_string INTO next_save_job;
+    END;
       
     
-      last_done_id := next_job;
-      num_jobs_done := num_jobs_done + 1;
-      box_id := next_job;
+    
+    IF next_save_job IS NULL or next_save_job = 0 THEN 
+      RAISE NOTICE ' start to check for new create job with box_id ';
+
+      -- check if more work to do
+      BEGIN
+      command_string := Format('UPDATE %1$s 
+      SET  start_time_phase_one = now() 
+      WHERE id = ( SELECT id FROM %1$s  WHERE start_time_phase_one is null LIMIT 1 FOR UPDATE SKIP LOCKED )
+      RETURNING id', job_list_name);
+      EXECUTE command_string INTO next_createdata_job;
+      END;
       
-      RAISE NOTICE ' start job with box_id = %  ', box_id;
+      IF next_createdata_job IS NOT NULL and next_createdata_job > 0 THEN
+        BEGIN 
+        
+        RAISE NOTICE ' start to rund create job with box_id = %  ',next_createdata_job;
+        command_string := Format('select sql_to_run from %s where id = %s', job_list_name, next_createdata_job);
+  	    EXECUTE command_string INTO command_string ;
+  	    EXECUTE command_string;
+  	    END;
+      END IF;
+    ELSE 
+      num_jobs_done := num_jobs_done + 1;
+      box_id := next_save_job;
+      RAISE NOTICE ' start to handle save job with box_id = %  ', box_id;
 
       command_string := Format('SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = %L)', _topology_name || '_' || box_id);
       EXECUTE command_string INTO topo_exist;
       IF topo_exist = true THEN
-	    BEGIN
-          RAISE NOTICE 'Start saving data to cell at timeofday:% for layer %, with box_id % , used % seconds.', Timeofday(), _topology_name, box_id, used_time;
+	      RAISE NOTICE 'Start saving dataaa to cell at timeofday:% for layer %, with box_id % , used % seconds.', Timeofday(), _topology_name, box_id, used_time;
           start_time := Clock_timestamp();
           -- _topology_name character varying, _new_line geometry, _snap_tolerance float, _table_name_result_prefix varchar
           command_string := Format('SELECT topo_update.add_border_lines(%1$L, r.geom, %2$s, %3$L) FROM (
@@ -53,35 +75,32 @@ BEGIN
           --RAISE NOTICE 'command_string %', command_string;
           EXECUTE command_string;
           used_time := (Extract(EPOCH FROM (Clock_timestamp() - start_time)));
-          start_time := Clock_timestamp();
+	      start_time := Clock_timestamp();
           PERFORM topology.DropTopology (_topology_name || '_' || box_id);
           RAISE NOTICE 'Done saving and deleting data for cell at timeofday:% for layer %, with box_id % , used % seconds.', Timeofday(), _topology_name, box_id, used_time;
-          EXCEPTION
-          WHEN OTHERS THEN
-            GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT, v_detail = PG_EXCEPTION_DETAIL, v_hint = PG_EXCEPTION_HINT,
-            v_context = PG_EXCEPTION_CONTEXT;
-          RAISE NOTICE 'Failed handle topology cleaup for % state  : % message: % detail : % hint   : % context: %', _topology_name || '_' || box_id, v_state, v_msg, v_detail, v_hint, v_context;
-          END;
       END IF;
-      command_string := Format('update %s set done_time_phase_two = now() where id = %s', job_list_name || '_donejobs', next_job);
+      command_string := Format('update %s set done_time_phase_two = now() where id = %s', job_list_name || '_donejobs', next_save_job);
   	  EXECUTE command_string;
-  	  COMMIT;
-
-      next_job = null;
-    ELSE
-      RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
-      PERFORM Pg_sleep(1);
     END IF;
+    
 
 
     command_string := Format('SELECT count(id) from %s as gt where done_time_phase_two is not null', job_list_name|| '_donejobs');
     EXECUTE command_string INTO num_jobs_done;
 
     RAISE NOTICE ' num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
-
+    
+    COMMIT;
     EXIT
     WHEN num_jobs_done = num_jobs;
-    
+
+    IF next_save_job is null and next_createdata_job is null THEN
+      RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
+      PERFORM Pg_sleep(1);
+    END IF;
+
+    next_save_job := null;
+    next_createdata_job := null;
   END LOOP;
   
   RAISE NOTICE ' done to handle num_jobs is % ', num_jobs;

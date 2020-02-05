@@ -118,16 +118,9 @@ BEGIN
       -- For job jobtype on we have to check that all data are saved to the database
       IF cell_job_type = 1 AND job_loop_counter = 1 THEN
          command_string := Format('CALL resolve_overlap_gap_save_single_cells(%L,%s,%L)',_topology_name, 0, table_name_result_prefix );
-         IF _max_parallel_jobs_save > 1 THEN
-           FOR ii IN 1.._max_parallel_jobs_save LOOP
-             stmts := ARRAY[command_string]||stmts;
-           END LOOP;
-           FOR ii IN 1.._max_parallel_jobs_save LOOP
-             stmts := stmts||ARRAY[command_string];
-           END LOOP;
-          ELSE
-          stmts := stmts||ARRAY[command_string];
-         END IF;
+         FOR ii IN 1.._max_parallel_jobs LOOP
+            stmts := ARRAY[command_string]||stmts;
+         END LOOP;
       END IF;
       
       EXIT

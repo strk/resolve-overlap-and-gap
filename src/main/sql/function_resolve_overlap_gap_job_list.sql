@@ -32,7 +32,7 @@ BEGIN
   command_string := Format('DROP table if exists %s', job_list_name_);
   RAISE NOTICE 'command_string %', command_string;
   EXECUTE command_string;
-  command_string := Format('CREATE unlogged table %s(id serial, start_time timestamp with time zone, sql_to_block varchar, sql_to_run varchar, cell_geo geometry(geometry,%s),block_bb Geometry(geometry,%s))',
+  command_string := Format('CREATE unlogged table %s(id serial, start_time timestamp with time zone, sql_to_block varchar, sql_to_run varchar, start_time_phase_one timestamp, done_time_phase_one timestamp, cell_geo geometry(geometry,%s),block_bb Geometry(geometry,%s))',
   job_list_name_,_srid,_srid);
   RAISE NOTICE 'command_string %', command_string;
   EXECUTE command_string;
@@ -54,7 +54,7 @@ BEGIN
   Quote_literal(job_list_name_), Quote_literal(overlapgap_grid_));
   RAISE NOTICE 'sql_to_run_grid %', sql_to_run_grid;
 
-  sql_to_block_cmd := Format('select resolve_overlap_gap_block_cell(%s,%s,%s,%s,', 
+  sql_to_block_cmd := Format('SELECT resolve_overlap_gap_block_cell(%s,%s,%s,%s,', 
   Quote_literal(table_to_resolve_), Quote_literal(geo_collumn_name_), Quote_literal(input_table_pk_column_name_), Quote_literal(job_list_name_));
   
   -- add inside cell polygons

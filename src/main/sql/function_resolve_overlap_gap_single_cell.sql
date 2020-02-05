@@ -123,7 +123,7 @@ BEGIN
     -- remove small polygons in main table
     --              num_rows_removed := topo_update.do_remove_small_areas_no_block(border_topo_info.topology_name,'topo_ar5_forest_sysdata.face' ,'mbr','face_id',_job_list_name ,bb );
     --              RAISE NOTICE 'Removed % small polygons in face_table_name %', num_rows_removed, 'topo_ar5_forest_sysdata.face';
-    COMMIT;
+    --COMMIT;
     --PERFORM topology.DropTopology (border_topo_info.topology_name);
   ELSIF _cell_job_type = 2 THEN
     -- on cell border
