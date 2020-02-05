@@ -53,11 +53,6 @@ DECLARE
   -- job loop counter
   job_loop_counter int = 0;
   
-  -- used to run a single background thread to save data to the master topology schema
-  db_conn_status int;
-  db_conn text;
-  db_connstr text;
-  db text;
   v_state text;
   v_msg text;
   v_detail text;
@@ -65,7 +60,6 @@ DECLARE
   v_context text;
   
   ii int;
-  _max_parallel_jobs_save int;
 
 
 BEGIN
@@ -85,9 +79,6 @@ BEGIN
   command_string := Format('SELECT resolve_overlap_gap_init(%L,%s,%s,%s,%s,%s,%s,%s)', table_name_result_prefix, Quote_literal(_table_to_resolve), Quote_literal(_table_geo_collumn_name), _table_srid, _max_rows_in_each_cell, Quote_literal(overlapgap_grid), Quote_literal(_topology_name), snap_tolerance);
   -- execute the string
   EXECUTE command_string INTO num_cells;
-
-  _max_parallel_jobs_save := (_max_parallel_jobs/2)::int;
-  
   
   
   FOR cell_job_type IN 1..3 LOOP
@@ -97,9 +88,6 @@ BEGIN
     EXECUTE command_string;
   
     
-    db_conn_status := 0;
-
-    
     COMMIT;
     
     -- start a job to save data agains the master job thread is slow
@@ -108,8 +96,11 @@ BEGIN
     
     
     LOOP
-    
+
       job_loop_counter := job_loop_counter + 1;
+
+      stmts := '{}';
+      RAISE NOTICE 'Start inner loop in resolve_overlap_gap_run cell_job_type %, job_loop_counter %', cell_job_type, job_loop_counter;
 
       command_string := Format('SELECT ARRAY(SELECT sql_to_run as func_call FROM %s WHERE block_bb is null ORDER BY md5(cell_geo::Text) desc)', job_list_name);
       RAISE NOTICE 'resolve_overlap_gap_run command_string %', command_string;			
@@ -119,18 +110,22 @@ BEGIN
       IF cell_job_type = 1 AND job_loop_counter = 1 THEN
          command_string := Format('CALL resolve_overlap_gap_save_single_cells(%L,%s,%L)',_topology_name, 0, table_name_result_prefix );
          FOR ii IN 1.._max_parallel_jobs LOOP
-            stmts := ARRAY[command_string]||stmts;
+            stmts[ii] := command_string;
          END LOOP;
+         SELECT execute_parallel (stmts, _max_parallel_jobs) INTO call_result;
       END IF;
       
+      RAISE NOTICE 'Done inner loop in resolve_overlap_gap_run array_length(stmts,1) %, stmts %', Array_length(stmts, 1), stmts;
+   
       EXIT
-        WHEN db_conn_status = 0 AND 
-          (Array_length(stmts, 1) IS NULL OR stmts IS NULL);
+        WHEN (Array_length(stmts, 1) IS NULL OR stmts IS NULL);
+      
+      IF cell_job_type > 1 THEN
+         SELECT execute_parallel (stmts, _max_parallel_jobs) INTO call_result;
+      END IF;
 
 
-        
-      RAISE NOTICE 'array_length(stmts,1) %, stmts %', Array_length(stmts, 1), stmts;
-      SELECT execute_parallel (stmts, _max_parallel_jobs) INTO call_result;
+
       IF (call_result = FALSE) THEN
         RAISE EXCEPTION 'resolve_overlap_gap_run Failed to run overlap and gap for % with the following statement list %', _table_to_resolve, stmts;
       END IF;

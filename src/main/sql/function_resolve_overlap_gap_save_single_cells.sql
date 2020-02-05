@@ -27,7 +27,8 @@ BEGIN
 
   LOOP
 
-    BEGIN
+       
+  	BEGIN
     -- check for new save jobs
     command_string := Format('UPDATE %1$s 
     SET  start_time_phase_two = now() 
@@ -52,12 +53,13 @@ BEGIN
       
       IF next_createdata_job IS NOT NULL and next_createdata_job > 0 THEN
         BEGIN 
-        
         RAISE NOTICE ' start to rund create job with box_id = %  ',next_createdata_job;
         command_string := Format('select sql_to_run from %s where id = %s', job_list_name, next_createdata_job);
   	    EXECUTE command_string INTO command_string ;
   	    EXECUTE command_string;
   	    END;
+  	    command_string := Format('update %s set done_time_phase_one = now() where id = %s', job_list_name, next_createdata_job);
+  	    EXECUTE command_string;
       END IF;
     ELSE 
       num_jobs_done := num_jobs_done + 1;
@@ -67,6 +69,7 @@ BEGIN
       command_string := Format('SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = %L)', _topology_name || '_' || box_id);
       EXECUTE command_string INTO topo_exist;
       IF topo_exist = true THEN
+      BEGIN
 	      RAISE NOTICE 'Start saving dataaa to cell at timeofday:% for layer %, with box_id % , used % seconds.', Timeofday(), _topology_name, box_id, used_time;
           start_time := Clock_timestamp();
           -- _topology_name character varying, _new_line geometry, _snap_tolerance float, _table_name_result_prefix varchar
@@ -78,19 +81,19 @@ BEGIN
 	      start_time := Clock_timestamp();
           PERFORM topology.DropTopology (_topology_name || '_' || box_id);
           RAISE NOTICE 'Done saving and deleting data for cell at timeofday:% for layer %, with box_id % , used % seconds.', Timeofday(), _topology_name, box_id, used_time;
+      END;
       END IF;
       command_string := Format('update %s set done_time_phase_two = now() where id = %s', job_list_name || '_donejobs', next_save_job);
   	  EXECUTE command_string;
     END IF;
     
-
-
     command_string := Format('SELECT count(id) from %s as gt where done_time_phase_two is not null', job_list_name|| '_donejobs');
     EXECUTE command_string INTO num_jobs_done;
-
     RAISE NOTICE ' num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
-    
+
     COMMIT;
+
+
     EXIT
     WHEN num_jobs_done = num_jobs;
 
