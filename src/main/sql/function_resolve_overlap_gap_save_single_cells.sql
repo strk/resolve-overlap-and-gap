@@ -50,6 +50,15 @@ BEGIN
       IF next_createdata_job IS NOT NULL and next_createdata_job > 0 THEN
             box_id := next_createdata_job;
 
+    -- seems to not work 
+    --    IF MOD(box_id,50) = 0 THEN
+    --      EXECUTE Format('ANALYZE %s.edge_data', _topology_name);
+    --      EXECUTE Format('ANALYZE %s.node', _topology_name);
+    --      EXECUTE Format('ANALYZE %s.face', _topology_name);
+    --      EXECUTE Format('ANALYZE %s.relation', _topology_name);
+    --    END IF;
+        
+        
         RAISE NOTICE ' start to rund create job with box_id = %  ',next_createdata_job;
         command_string := Format('select sql_to_run from %s where id = %s', job_list_name, next_createdata_job);
   	    EXECUTE command_string INTO command_string ;
