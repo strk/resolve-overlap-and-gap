@@ -63,6 +63,9 @@ DECLARE
   v_detail text;
   v_hint text;
   v_context text;
+  
+  ii int;
+  _max_parallel_jobs_save int;
 
 
 BEGIN
@@ -83,12 +86,9 @@ BEGIN
   -- execute the string
   EXECUTE command_string INTO num_cells;
 
-  -- set up backgroun connection
-  db := current_database();
-  db_conn := 'conn'||_topology_name;
-  db_connstr := 'dbname='||db;
-
-
+  _max_parallel_jobs_save := (_max_parallel_jobs/2)::int;
+  
+  
   
   FOR cell_job_type IN 1..3 LOOP
     -- 1 ############################# START # add lines inside box and cut lines and save then in separate table,
@@ -118,7 +118,16 @@ BEGIN
       -- For job jobtype on we have to check that all data are saved to the database
       IF cell_job_type = 1 AND job_loop_counter = 1 THEN
          command_string := Format('CALL resolve_overlap_gap_save_single_cells(%L,%s,%L)',_topology_name, 0, table_name_result_prefix );
-         stmts := ARRAY[command_string]||stmts;
+         IF _max_parallel_jobs_save > 1 THEN
+           FOR ii IN 1.._max_parallel_jobs_save LOOP
+             stmts := ARRAY[command_string]||stmts;
+           END LOOP;
+           FOR ii IN 1.._max_parallel_jobs_save LOOP
+             stmts := stmts||ARRAY[command_string];
+           END LOOP;
+          ELSE
+          stmts := stmts||ARRAY[command_string];
+         END IF;
       END IF;
       
       EXIT

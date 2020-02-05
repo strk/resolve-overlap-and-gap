@@ -12,7 +12,6 @@ DECLARE
   last_done_id int = - 1;
   next_job int = - 1;
   box_id int;
-  jobs_done_list varchar = '-1';
   job_list_name varchar = _table_name_result_prefix || '_job_list';
   topo_exist boolean;
   v_state text;
@@ -28,16 +27,20 @@ BEGIN
 
   LOOP
     --	execute command_string;
-    command_string := Format('select gt.id from %s as gt where gt.id not in(%s) order by done_time limit 1', job_list_name || '_donejobs', jobs_done_list);
+    command_string := Format('select gt.id from %s as gt where start_time_phase_two is null order by done_time limit 1 for update', job_list_name || '_donejobs');
     EXECUTE command_string INTO next_job;
     IF next_job IS NOT NULL THEN
+      command_string := Format('update %s set start_time_phase_two = now() where id = %s', job_list_name || '_donejobs', next_job);
+  	  EXECUTE command_string;
+  	  COMMIT;
+      
+    
       last_done_id := next_job;
       num_jobs_done := num_jobs_done + 1;
       box_id := next_job;
       
       RAISE NOTICE ' start job with box_id = %  ', box_id;
 
-      jobs_done_list = jobs_done_list || ',' || next_job::Varchar;
       command_string := Format('SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = %L)', _topology_name || '_' || box_id);
       EXECUTE command_string INTO topo_exist;
       IF topo_exist = true THEN
@@ -60,13 +63,20 @@ BEGIN
           RAISE NOTICE 'Failed handle topology cleaup for % state  : % message: % detail : % hint   : % context: %', _topology_name || '_' || box_id, v_state, v_msg, v_detail, v_hint, v_context;
           END;
       END IF;
+      command_string := Format('update %s set done_time_phase_two = now() where id = %s', job_list_name || '_donejobs', next_job);
+  	  EXECUTE command_string;
+  	  COMMIT;
+
       next_job = null;
     ELSE
       RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
       PERFORM Pg_sleep(1);
     END IF;
 
-    
+
+    command_string := Format('SELECT count(id) from %s as gt where done_time_phase_two is not null', job_list_name|| '_donejobs');
+    EXECUTE command_string INTO num_jobs_done;
+
     RAISE NOTICE ' num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
 
     EXIT
