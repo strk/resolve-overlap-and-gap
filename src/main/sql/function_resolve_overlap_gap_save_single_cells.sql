@@ -48,10 +48,14 @@ BEGIN
       EXECUTE command_string INTO next_createdata_job;
       
       IF next_createdata_job IS NOT NULL and next_createdata_job > 0 THEN
+            box_id := next_createdata_job;
+
         RAISE NOTICE ' start to rund create job with box_id = %  ',next_createdata_job;
         command_string := Format('select sql_to_run from %s where id = %s', job_list_name, next_createdata_job);
   	    EXECUTE command_string INTO command_string ;
   	    EXECUTE command_string;
+  	    
+  	  
   	    command_string := Format('update %s set done_time_phase_one = now() where id = %s', job_list_name, next_createdata_job);
   	    EXECUTE command_string;
       END IF;
@@ -64,14 +68,6 @@ BEGIN
       EXECUTE command_string INTO topo_exist;
       IF topo_exist = true THEN
 
-	      RAISE NOTICE 'Start saving dataaa to cell at timeofday:% for layer %, with box_id % , used % seconds.', Timeofday(), _topology_name, box_id, used_time;
-          start_time := Clock_timestamp();
-          -- _topology_name character varying, _new_line geometry, _snap_tolerance float, _table_name_result_prefix varchar
-          command_string := Format('SELECT topo_update.add_border_lines(%1$L, r.geom, %2$s, %3$L) FROM (
-                     SELECT geom from  %4$s.edge) as r', _topology_name, _snap_tolerance, _table_name_result_prefix, _topology_name || '_' || box_id);
-          --RAISE NOTICE 'command_string %', command_string;
-          EXECUTE command_string;
-          used_time := (Extract(EPOCH FROM (Clock_timestamp() - start_time)));
 	      start_time := Clock_timestamp();
           PERFORM topology.DropTopology (_topology_name || '_' || box_id);
           RAISE NOTICE 'Done saving and deleting data for cell at timeofday:% for layer %, with box_id % , used % seconds.', Timeofday(), _topology_name, box_id, used_time;
@@ -85,7 +81,6 @@ BEGIN
     RAISE NOTICE ' num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
 
     COMMIT;
-
 
     EXIT
     WHEN num_jobs_done = num_jobs;
