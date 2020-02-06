@@ -77,6 +77,11 @@ BEGIN
       EXECUTE command_string INTO topo_exist;
       IF topo_exist = true THEN
 
+      command_string := Format('SELECT topo_update.add_border_lines(%3$L,r.geom,%1$s,%4$L) FROM (
+                  SELECT geom from  %2$s.edge) as r', _snap_tolerance, _topology_name || '_' || box_id, _topology_name, _table_name_result_prefix);
+    --RAISE NOTICE 'command_string %', command_string;
+    EXECUTE command_string;
+    
 	      start_time := Clock_timestamp();
           PERFORM topology.DropTopology (_topology_name || '_' || box_id);
           RAISE NOTICE 'Done saving and deleting data for cell at timeofday:% for layer %, with box_id % , used % seconds.', Timeofday(), _topology_name, box_id, used_time;
