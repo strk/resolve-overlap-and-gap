@@ -107,7 +107,7 @@ BEGIN
       EXECUTE command_string INTO stmts;
       
       -- For job jobtype on we have to check that all data are saved to the database
-      IF cell_job_type = 1 AND job_loop_counter = 1 THEN
+      IF cell_job_type = 1 AND (Array_length(stmts, 1)) > 0  THEN
          stmts := '{}';
          command_string := Format('CALL resolve_overlap_gap_save_single_cells(%L,%s,%L)',_topology_name, 0, table_name_result_prefix );
          FOR ii IN 1.._max_parallel_jobs LOOP
@@ -116,7 +116,7 @@ BEGIN
          SELECT execute_parallel (stmts, _max_parallel_jobs) INTO call_result;
       END IF;
       
-      RAISE NOTICE 'Done inner loop in resolve_overlap_gap_run array_length(stmts,1) %, stmts %', Array_length(stmts, 1), stmts;
+      RAISE NOTICE 'Contiune inner loop in resolve_overlap_gap_run array_length(stmts,1) %, stmts %', Array_length(stmts, 1), stmts;
    
       EXIT
         WHEN (Array_length(stmts, 1) IS NULL OR stmts IS NULL);

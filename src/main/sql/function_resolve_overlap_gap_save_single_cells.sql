@@ -19,12 +19,15 @@ DECLARE
   v_detail text;
   v_hint text;
   v_context text;
+  job_loop_counter int = 0;
+
 BEGIN
   -- check total number og jobs to wait for
   command_string := Format('SELECT count(*) from %s as gt', job_list_name);
   EXECUTE command_string INTO num_jobs;
   RAISE NOTICE ' starting to handle num_jobs is % ', num_jobs;
 
+  
   LOOP
 
        
@@ -50,6 +53,8 @@ BEGIN
       IF next_createdata_job IS NOT NULL and next_createdata_job > 0 THEN
             box_id := next_createdata_job;
 
+        job_loop_counter := job_loop_counter + 1;
+
     -- seems to not work 
         IF MOD(box_id,100) = 0 THEN
           EXECUTE Format('ANALYZE %s.edge_data', _topology_name);
@@ -69,7 +74,7 @@ BEGIN
   	    EXECUTE command_string;
       END IF;
     ELSE 
-      num_jobs_done := num_jobs_done + 1;
+     job_loop_counter := job_loop_counter + 1;
       box_id := next_save_job;
       RAISE NOTICE ' start to handle save job with box_id = %  ', box_id;
 
@@ -97,7 +102,7 @@ BEGIN
     COMMIT;
 
     EXIT
-    WHEN num_jobs_done = num_jobs;
+    WHEN num_jobs_done = num_jobs or job_loop_counter > 100;
 
     IF next_save_job is null and next_createdata_job is null THEN
       RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
