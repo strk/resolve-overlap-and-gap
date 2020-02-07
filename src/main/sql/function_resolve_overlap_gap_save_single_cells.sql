@@ -22,10 +22,11 @@ DECLARE
   job_loop_counter int = 0;
 
 BEGIN
-  -- check total number og jobs to wait for
+  start_time = clock_timestamp();
+
   command_string := Format('SELECT count(*) from %s as gt', job_list_name);
   EXECUTE command_string INTO num_jobs;
-  RAISE NOTICE ' starting to handle num_jobs is % ', num_jobs;
+  RAISE NOTICE ' starting to handle num_jobs is %  at start_time %s', num_jobs, start_time;
 
   
   LOOP
@@ -55,15 +56,6 @@ BEGIN
 
         job_loop_counter := job_loop_counter + 1;
 
-    -- seems to not work 
-        IF MOD(box_id,100) = 0 THEN
-          EXECUTE Format('ANALYZE %s.edge_data', _topology_name);
-          EXECUTE Format('ANALYZE %s.node', _topology_name);
-          EXECUTE Format('ANALYZE %s.face', _topology_name);
-          EXECUTE Format('ANALYZE %s.relation', _topology_name);
-        END IF;
-        
-        
         RAISE NOTICE ' start to rund create job with box_id = %  ',next_createdata_job;
         command_string := Format('select sql_to_run from %s where id = %s', job_list_name, next_createdata_job);
   	    EXECUTE command_string INTO command_string ;
@@ -84,12 +76,11 @@ BEGIN
 
       command_string := Format('SELECT topo_update.add_border_lines(%3$L,r.geom,%1$s,%4$L) FROM (
                   SELECT geom from  %2$s.edge) as r', _snap_tolerance, _topology_name || '_' || box_id, _topology_name, _table_name_result_prefix);
-    --RAISE NOTICE 'command_string %', command_string;
-    EXECUTE command_string;
+      --RAISE NOTICE 'command_string %', command_string;
+      EXECUTE command_string;
     
-	      start_time := Clock_timestamp();
           PERFORM topology.DropTopology (_topology_name || '_' || box_id);
-          RAISE NOTICE 'Done saving and deleting data for cell at timeofday:% for layer %, with box_id % , used % seconds.', Timeofday(), _topology_name, box_id, used_time;
+          RAISE NOTICE 'Done saving and deleting data for cell at timeofday:% for layer %, with box_id % .', Timeofday(), _topology_name, box_id;
       END IF;
       command_string := Format('update %s set done_time_phase_two = now() where id = %s', job_list_name || '_donejobs', next_save_job);
   	  EXECUTE command_string;
@@ -97,12 +88,17 @@ BEGIN
     
     command_string := Format('SELECT count(id) from %s as gt where done_time_phase_two is not null', job_list_name|| '_donejobs');
     EXECUTE command_string INTO num_jobs_done;
-    RAISE NOTICE ' num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
 
     COMMIT;
+    
+    done_time = clock_timestamp();
+    used_time := (Extract(EPOCH FROM (done_time - start_time)));
+ 
+    RAISE NOTICE 'job_loop_info  job_loop_counter = %, used_time = % , seconds pr loop avg % ', job_loop_counter, used_time, used_time/job_loop_counter;
+
 
     EXIT
-    WHEN num_jobs_done = num_jobs or job_loop_counter > 100;
+    WHEN num_jobs_done >= num_jobs or job_loop_counter > 50 or used_time > (60*15);
 
     IF next_save_job is null and next_createdata_job is null THEN
       RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
@@ -112,8 +108,9 @@ BEGIN
     next_save_job := null;
     next_createdata_job := null;
   END LOOP;
-  
-  RAISE NOTICE ' done to handle num_jobs is % ', num_jobs;
+
+  RAISE NOTICE 'final job_loop_info finish at % job_loop_counter = %, used_time = % , seconds pr loop avg % ', 
+  done_time, job_loop_counter, used_time, used_time/job_loop_counter;
 
 END
 $$;
