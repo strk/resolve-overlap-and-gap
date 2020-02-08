@@ -110,13 +110,6 @@ BEGIN
       IF cell_job_type = 1 AND (Array_length(stmts, 1)) > 0  THEN
          stmts := '{}';
          command_string := Format('CALL resolve_overlap_gap_save_single_cells(%L,%s,%L)',_topology_name, 0, table_name_result_prefix );
-         
-          EXECUTE Format('ANALYZE %s.edge_data', _topology_name);
-          EXECUTE Format('ANALYZE %s.node', _topology_name);
-          EXECUTE Format('ANALYZE %s.face', _topology_name);
-          EXECUTE Format('ANALYZE %s.relation', _topology_name);
-        
-        
 
          FOR ii IN 1.._max_parallel_jobs LOOP
             stmts[ii] := command_string;

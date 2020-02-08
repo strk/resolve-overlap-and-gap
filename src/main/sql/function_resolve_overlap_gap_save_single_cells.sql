@@ -95,7 +95,7 @@ BEGIN
     used_time := (Extract(EPOCH FROM (done_time - start_time)));
 
     
-     IF MOD(box_id,25) = 0 THEN
+     IF box_id > 0 and MOD(box_id,50) = 0 THEN
        EXECUTE Format('ANALYZE %s.edge_data', _topology_name);
        EXECUTE Format('ANALYZE %s.node', _topology_name);
        EXECUTE Format('ANALYZE %s.face', _topology_name);
@@ -106,7 +106,7 @@ BEGIN
 
 
     EXIT
-    WHEN num_jobs_done >= num_jobs or job_loop_counter > 400 or used_time > (60*60);
+    WHEN num_jobs_done >= num_jobs or job_loop_counter > 400 or used_time > (60*15);
 
     IF next_save_job is null and next_createdata_job is null THEN
       RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
