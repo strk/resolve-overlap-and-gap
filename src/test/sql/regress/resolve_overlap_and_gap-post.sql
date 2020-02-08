@@ -13,7 +13,11 @@ _max_parallel_jobs int, -- this is the max number of paralell jobs to run. There
 _max_rows_in_each_cell int -- this is the max number rows that intersects with box before it's split into 4 new boxes, default is 5000
 );
 
-DROP PROCEDURE IF EXISTS resolve_overlap_gap_save_single_cells (_topology_name varchar, _snap_tolerance double precision, _table_name_result_prefix varchar);
+DROP PROCEDURE IF EXISTS resolve_overlap_gap_save_single_cells (
+_topology_name varchar, 
+_snap_tolerance double precision, 
+_table_name_result_prefix varchar,
+_cell_job_type int);
 
 DROP FUNCTION IF EXISTS resolve_overlap_gap_init(
 _table_name_result_prefix varchar,

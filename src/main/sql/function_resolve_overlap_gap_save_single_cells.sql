@@ -1,5 +1,9 @@
 -- Find cell ready save in master table
-CREATE OR REPLACE PROCEDURE resolve_overlap_gap_save_single_cells (_topology_name varchar, _snap_tolerance double precision, _table_name_result_prefix varchar)
+CREATE OR REPLACE PROCEDURE resolve_overlap_gap_save_single_cells (
+_topology_name varchar, 
+_snap_tolerance double precision, 
+_table_name_result_prefix varchar,
+_cell_job_type int)
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -26,7 +30,7 @@ BEGIN
 
   command_string := Format('SELECT count(*) from %s as gt', job_list_name);
   EXECUTE command_string INTO num_jobs;
-  RAISE NOTICE ' starting to handle num_jobs is %  at start_time %s', num_jobs, start_time;
+  RAISE NOTICE ' starting to handle num_jobs is %  at start_time %s cell_job_type %s ', num_jobs, start_time, _cell_job_type;
 
   
   LOOP
@@ -60,27 +64,23 @@ BEGIN
         command_string := Format('select sql_to_run from %s where id = %s', job_list_name, next_createdata_job);
   	    EXECUTE command_string INTO command_string ;
   	    EXECUTE command_string;
-  	    
-  	  
   	    command_string := Format('update %s set done_time_phase_one = now() where id = %s', job_list_name, next_createdata_job);
   	    EXECUTE command_string;
       END IF;
-    ELSE 
+    ELSE
      job_loop_counter := job_loop_counter + 1;
       box_id := next_save_job;
-      RAISE NOTICE ' start to handle save job with box_id = %  ', box_id;
-
-      command_string := Format('SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = %L)', _topology_name || '_' || box_id);
-      EXECUTE command_string INTO topo_exist;
-      IF topo_exist = true THEN
-
-      command_string := Format('SELECT topo_update.add_border_lines(%3$L,r.geom,%1$s,%4$L) FROM (
+      RAISE NOTICE ' start to handle save job with box_id = % and cell_job_type %s', box_id, _cell_job_type;
+      IF _cell_job_type = 1 THEN
+        command_string := Format('SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = %L)', _topology_name || '_' || box_id);
+        EXECUTE command_string INTO topo_exist;
+          IF topo_exist = true THEN
+          command_string := Format('SELECT topo_update.add_border_lines(%3$L,r.geom,%1$s,%4$L) FROM (
                   SELECT geom from  %2$s.edge) as r', _snap_tolerance, _topology_name || '_' || box_id, _topology_name, _table_name_result_prefix);
-      --RAISE NOTICE 'command_string %', command_string;
-      EXECUTE command_string;
-    
+          EXECUTE command_string;
           PERFORM topology.DropTopology (_topology_name || '_' || box_id);
           RAISE NOTICE 'Done saving and deleting data for cell at timeofday:% for layer %, with box_id % .', Timeofday(), _topology_name, box_id;
+        END IF;  
       END IF;
       command_string := Format('update %s set done_time_phase_two = now() where id = %s', job_list_name || '_donejobs', next_save_job);
   	  EXECUTE command_string;
@@ -102,7 +102,7 @@ BEGIN
        EXECUTE Format('ANALYZE %s.relation', _topology_name);
      END IF;
 
-    RAISE NOTICE 'job_loop_info  job_loop_counter = %, used_time = % , seconds pr loop avg % ', job_loop_counter, used_time, used_time/job_loop_counter;
+    RAISE NOTICE 'job_loop_info  job_loop_counter = %, used_time = % , seconds pr loop avg % cell_job_type %s ', job_loop_counter, used_time, used_time/job_loop_counter, _cell_job_type;
 
 
     EXIT
@@ -117,8 +117,8 @@ BEGIN
     next_createdata_job := null;
   END LOOP;
 
-  RAISE NOTICE 'final job_loop_info finish at % job_loop_counter = %, used_time = % , seconds pr loop avg % ', 
-  done_time, job_loop_counter, used_time, used_time/job_loop_counter;
+  RAISE NOTICE 'final job_loop_info finish at % job_loop_counter = %, used_time = % , seconds pr loop avg % cell_job_type %s', 
+  done_time, job_loop_counter, used_time, used_time/job_loop_counter, _cell_job_type ;
 
 END
 $$;
