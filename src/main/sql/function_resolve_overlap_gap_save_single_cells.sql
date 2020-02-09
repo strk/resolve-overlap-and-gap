@@ -82,7 +82,7 @@ BEGIN
   	      job_list_name, next_createdata_job);
   	      EXECUTE command_string;
   	    END IF;
-  	    
+  	    COMMIT;
       END IF;
     ELSE
      job_loop_counter := job_loop_counter + 1;
@@ -101,12 +101,11 @@ BEGIN
       END IF;
       command_string := Format('update %s set done_time_phase_two = now() where id = %s', job_list_name || '_donejobs', next_save_job);
   	  EXECUTE command_string;
+  	  COMMIT;
     END IF;
     
     command_string := Format('SELECT count(id) from %s as gt where done_time_phase_two is not null', job_list_name|| '_donejobs');
     EXECUTE command_string INTO num_jobs_done;
-
-    COMMIT;
     
     done_time = clock_timestamp();
     used_time := (Extract(EPOCH FROM (done_time - start_time)));
@@ -127,7 +126,7 @@ BEGIN
 
     IF next_save_job is null and next_createdata_job is null THEN
       RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs %, cell_job_type %', num_jobs_done, num_jobs, _cell_job_type;
-      PERFORM Pg_sleep(1);
+      --PERFORM Pg_sleep(1);
     END IF;
 
     next_save_job := null;
