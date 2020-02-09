@@ -131,7 +131,7 @@ BEGIN
 
     IF next_save_job is null and next_createdata_job is null THEN
       RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs %, cell_job_type %', num_jobs_done, num_jobs, _cell_job_type;
-      PERFORM pg_sleep(0.5);
+      PERFORM pg_sleep(1);
     END IF;
 
     next_save_job := null;
