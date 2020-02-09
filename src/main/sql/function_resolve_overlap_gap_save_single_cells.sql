@@ -24,6 +24,7 @@ DECLARE
   v_hint text;
   v_context text;
   job_loop_counter int = 0;
+  jd int;
 
 BEGIN
   start_time = clock_timestamp();
@@ -35,18 +36,20 @@ BEGIN
   
   LOOP
 
-       
+
+    RAISE NOTICE 'start to check for new save job at % for_cell_job_type % ' , clock_timestamp(), _cell_job_type;
+
     -- check for new save jobs
     command_string := Format('UPDATE %1$s 
     SET  start_time_phase_two = now() 
     WHERE id = ( SELECT id FROM %1$s  WHERE start_time_phase_two is null LIMIT 1 FOR UPDATE SKIP LOCKED )
     RETURNING id', job_list_name || '_donejobs');
     EXECUTE command_string INTO next_save_job;
-      
+    COMMIT;  
     
     
     IF next_save_job IS NULL or next_save_job = 0 THEN 
-      RAISE NOTICE ' start to check for new create job with box_id ';
+      RAISE NOTICE 'start to check for new create job at % for_cell_job_type % ' , clock_timestamp(), _cell_job_type;
 
       -- check if more work to do
       command_string := Format('UPDATE %1$s 
@@ -54,18 +57,32 @@ BEGIN
       WHERE id = ( SELECT id FROM %1$s  WHERE start_time_phase_one is null LIMIT 1 FOR UPDATE SKIP LOCKED )
       RETURNING id', job_list_name);
       EXECUTE command_string INTO next_createdata_job;
+      COMMIT;
       
       IF next_createdata_job IS NOT NULL and next_createdata_job > 0 THEN
             box_id := next_createdata_job;
 
         job_loop_counter := job_loop_counter + 1;
 
-        RAISE NOTICE ' start to rund create job with box_id = %  ',next_createdata_job;
+        RAISE NOTICE 'start to run create job with box_id = %  ',next_createdata_job;
         command_string := Format('select sql_to_run from %s where id = %s', job_list_name, next_createdata_job);
   	    EXECUTE command_string INTO command_string ;
   	    EXECUTE command_string;
-  	    command_string := Format('update %s set done_time_phase_one = now() where id = %s', job_list_name, next_createdata_job);
-  	    EXECUTE command_string;
+  	    COMMIT;
+  	    command_string := Format('SELECT count(*) FROM %1$s WHERE id = %2$s',
+  	    job_list_name || '_donejobs',next_createdata_job);
+  	    
+        EXECUTE command_string INTO jd;
+        IF jd = 1 THEN 
+  	      command_string := Format('update %s set done_time_phase_one = now() where id = %s', 
+  	      job_list_name, next_createdata_job);
+  	      EXECUTE command_string;
+  	    ELSE 
+  	      command_string := Format('update %s set start_time_phase_one = null where id = %s', 
+  	      job_list_name, next_createdata_job);
+  	      EXECUTE command_string;
+  	    END IF;
+  	    
       END IF;
     ELSE
      job_loop_counter := job_loop_counter + 1;
@@ -109,7 +126,7 @@ BEGIN
     WHEN num_jobs_done >= num_jobs or job_loop_counter > 400 or used_time > (60*15);
 
     IF next_save_job is null and next_createdata_job is null THEN
-      RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs % ', num_jobs_done, num_jobs;
+      RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs %, cell_job_type %', num_jobs_done, num_jobs, _cell_job_type;
       PERFORM Pg_sleep(1);
     END IF;
 
@@ -117,7 +134,7 @@ BEGIN
     next_createdata_job := null;
   END LOOP;
 
-  RAISE NOTICE 'final job_loop_info finish at % job_loop_counter = %, used_time = % , seconds pr loop avg % cell_job_type %s', 
+  RAISE NOTICE 'final job_loop_info finish at % job_loop_counter = %, used_time = % , seconds pr loop avg % cell_job_type %', 
   done_time, job_loop_counter, used_time, used_time/job_loop_counter, _cell_job_type ;
 
 END
