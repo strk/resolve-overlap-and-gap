@@ -74,17 +74,22 @@ BEGIN
   	    
         EXECUTE command_string INTO jd;
         IF jd = 1 THEN 
-  	      command_string := Format('update %s set done_time_phase_one = now() where id = %s', 
+          command_string := Format('update %s set done_time_phase_one = now() where id = %s', 
   	      job_list_name, next_createdata_job);
   	      EXECUTE command_string;
+  	      IF _cell_job_type > 1 THEN
+  	        command_string := Format('update %s set start_time_phase_two = now(), done_time_phase_two = now() where id = %s', job_list_name || '_donejobs', next_createdata_job);
+  	  		EXECUTE command_string;
+  	      END IF;
   	    ELSE 
   	      command_string := Format('update %s set start_time_phase_one = null where id = %s', 
   	      job_list_name, next_createdata_job);
   	      EXECUTE command_string;
+  	      next_createdata_job := null;
   	    END IF;
   	    COMMIT;
       END IF;
-    ELSE
+    ELSIF _cell_job_type = 1 THEN
      job_loop_counter := job_loop_counter + 1;
       box_id := next_save_job;
       RAISE NOTICE ' start to handle save job with box_id = % and cell_job_type %s', box_id, _cell_job_type;
@@ -111,7 +116,7 @@ BEGIN
     used_time := (Extract(EPOCH FROM (done_time - start_time)));
 
     
-     IF box_id > 0 and MOD(box_id,50) = 0 THEN
+    IF box_id > 0 and MOD(box_id,50) = 0 THEN
        EXECUTE Format('ANALYZE %s.edge_data', _topology_name);
        EXECUTE Format('ANALYZE %s.node', _topology_name);
        EXECUTE Format('ANALYZE %s.face', _topology_name);
@@ -126,7 +131,7 @@ BEGIN
 
     IF next_save_job is null and next_createdata_job is null THEN
       RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs %, cell_job_type %', num_jobs_done, num_jobs, _cell_job_type;
-      --PERFORM Pg_sleep(1);
+      PERFORM pg_sleep(0.5);
     END IF;
 
     next_save_job := null;
