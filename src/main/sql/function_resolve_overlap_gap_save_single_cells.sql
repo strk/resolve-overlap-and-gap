@@ -25,6 +25,7 @@ DECLARE
   v_context text;
   job_loop_counter int = 0;
   jd int;
+  num_no_jobs_rounds int = 0;
 
 BEGIN
   start_time = clock_timestamp();
@@ -54,14 +55,14 @@ BEGIN
       -- check if more work to do
       command_string := Format('UPDATE %1$s 
       SET  start_time_phase_one = now() 
-      WHERE id = ( SELECT id FROM %1$s  WHERE start_time_phase_one is null LIMIT 1 FOR UPDATE SKIP LOCKED )
+      WHERE id = ( SELECT id FROM %1$s  WHERE start_time_phase_one is null and block_bb is null ORDER BY md5(cell_geo::Text) desc LIMIT 1 FOR UPDATE SKIP LOCKED )
       RETURNING id', job_list_name);
       EXECUTE command_string INTO next_createdata_job;
       COMMIT;
       
       IF next_createdata_job IS NOT NULL and next_createdata_job > 0 THEN
             box_id := next_createdata_job;
-
+        num_no_jobs_rounds := 0;
         job_loop_counter := job_loop_counter + 1;
 
         RAISE NOTICE 'start to run create job with box_id = %  ',next_createdata_job;
@@ -91,6 +92,7 @@ BEGIN
       END IF;
     ELSIF _cell_job_type = 1 THEN
      job_loop_counter := job_loop_counter + 1;
+      num_no_jobs_rounds := 0;
       box_id := next_save_job;
       RAISE NOTICE ' start to handle save job with box_id = % and cell_job_type %s', box_id, _cell_job_type;
       IF _cell_job_type = 1 THEN
@@ -123,15 +125,16 @@ BEGIN
        EXECUTE Format('ANALYZE %s.relation', _topology_name);
      END IF;
 
-    RAISE NOTICE 'job_loop_info  job_loop_counter = %, used_time = % , seconds pr loop avg % cell_job_type %s ', job_loop_counter, used_time, used_time/job_loop_counter, _cell_job_type;
+    RAISE NOTICE 'job_loop_info  job_loop_counter = %, used_time = % , seconds pr loop avg % cell_job_type %s , num_no_jobs_rounds %s ', job_loop_counter, used_time, used_time/job_loop_counter, _cell_job_type,  num_no_jobs_rounds;
 
 
     EXIT
-    WHEN num_jobs_done >= num_jobs or job_loop_counter > 400 or used_time > (60*15);
+    WHEN num_jobs_done >= num_jobs or num_no_jobs_rounds > 2 or job_loop_counter > 400 or used_time > (60*15);
 
     IF next_save_job is null and next_createdata_job is null THEN
       RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs %, cell_job_type %', num_jobs_done, num_jobs, _cell_job_type;
       PERFORM pg_sleep(1);
+      num_no_jobs_rounds := num_no_jobs_rounds + 1;
     END IF;
 
     next_save_job := null;

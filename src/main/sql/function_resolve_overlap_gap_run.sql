@@ -118,10 +118,11 @@ BEGIN
       END IF;
       
       RAISE NOTICE 'Contiune inner loop in resolve_overlap_gap_run array_length(stmts,1) %, stmts %', Array_length(stmts, 1), stmts;
-   
+
       EXIT
         WHEN (Array_length(stmts, 1) IS NULL OR stmts IS NULL);
       
+  
 
       IF (call_result = FALSE) THEN
         RAISE EXCEPTION 'resolve_overlap_gap_run Failed to run overlap and gap for % with the following statement list %', _table_to_resolve, stmts;
