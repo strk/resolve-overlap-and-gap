@@ -46,12 +46,18 @@ BEGIN
     
     LOOP
       stmts := '{}';
-      command_string := Format('SELECT ARRAY(SELECT sql_to_run as func_call FROM %s WHERE block_bb is null ORDER BY md5(cell_geo::Text) desc limit %s)', _job_list_name,_max_parallel_jobs*4);
+      command_string := Format('SELECT ARRAY(SELECT sql_to_run as func_call FROM %s WHERE block_bb is null ORDER BY md5(cell_geo::Text) desc limit %s)', _job_list_name,_max_parallel_jobs*25);
       RAISE NOTICE 'command_string %', command_string;
       EXECUTE command_string INTO stmts;
       EXIT
       WHEN Array_length(stmts, 1) IS NULL
         OR stmts IS NULL;
+         
+       EXECUTE Format('ANALYZE %s.edge_data', _topology_name);
+       EXECUTE Format('ANALYZE %s.node', _topology_name);
+       EXECUTE Format('ANALYZE %s.face', _topology_name);
+       EXECUTE Format('ANALYZE %s.relation', _topology_name);
+  
       RAISE NOTICE 'array_length(stmts,1) %, stmts %', Array_length(stmts, 1), stmts;
       SELECT execute_parallel (stmts, _max_parallel_jobs) INTO call_result;
       IF (call_result = FALSE) THEN

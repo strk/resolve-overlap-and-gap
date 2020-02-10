@@ -364,13 +364,17 @@ begin
 
 		    if (conn_status = 0) THEN
 		    	BEGIN
-			    	--rv := dblink_send_query(conn,'COMMIT');
-
+			    	
 				    select val into retv from dblink_get_result(conn) as d(val text);
+				    
 			  		--RAISE NOTICE 'current_stmt_index =% , val1 status= %', current_stmt_index, retv;
 				    -- Two times to reuse connecton according to doc.
 				    
 				    select val into retvnull from dblink_get_result(conn) as d(val text);
+				    
+				    perform dblink_exec(conn,'COMMIT');
+
+
 			  		--RAISE NOTICE 'current_stmt_index =% , val2 status= %', current_stmt_index, retv;
 				EXCEPTION WHEN OTHERS THEN
 				    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT, v_detail = PG_EXCEPTION_DETAIL, v_hint = PG_EXCEPTION_HINT,
@@ -380,7 +384,7 @@ begin
 				END;
 			    IF (current_stmt_index <= array_length(stmts,1)) THEN
 			   		RAISE NOTICE 'Call stmt %  on connection  %', stmts[current_stmt_index], conn;
-				    rv := dblink_send_query(conn,stmts[current_stmt_index]);
+				    rv := dblink_send_query(conn,'BEGIN; '||stmts[current_stmt_index]);
 					current_stmt_index = current_stmt_index + 1;
 					all_stmts_done = false;
 					new_stmts_started = true;
