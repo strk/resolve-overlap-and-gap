@@ -80,12 +80,8 @@ BEGIN
   END IF;
 
     
-  FOR cell_job_type IN 1..5 LOOP
-  IF cell_job_type = 2 THEN
-    perform resolve_overlap_gap_run(_table_to_resolve, _table_geo_collumn_name, _table_srid, _utm, overlapgap_grid, table_name_result_prefix, _topology_name, job_list_name, _table_pk_column_name, simplify_tolerance, snap_tolerance, _do_chaikins, _min_area_to_keep, cell_job_type, _max_parallel_jobs/5::int);
-  ELSE
+  FOR cell_job_type IN 1..3 LOOP
     perform resolve_overlap_gap_run(_table_to_resolve, _table_geo_collumn_name, _table_srid, _utm, overlapgap_grid, table_name_result_prefix, _topology_name, job_list_name, _table_pk_column_name, simplify_tolerance, snap_tolerance, _do_chaikins, _min_area_to_keep, cell_job_type, _max_parallel_jobs);
-  END IF;
   END LOOP;
 -- blocked_pid                           | 58067
 --blocked_user                          | lop
