@@ -316,6 +316,12 @@ declare
   db text := current_database();
 begin
 	
+	IF (Array_length(stmts, 1) IS NULL OR stmts IS NULL) THEN
+       RAISE NOTICE 'No statements to execute';
+       RETURN TRUE;
+    END IF;
+ 	
+	
 	-- Check if num parallel theads if bugger than num stmts
 	IF (num_parallel_thread > array_length(stmts,1)) THEN
   	  	num_parallel_thread = array_length(stmts,1);
@@ -363,10 +369,6 @@ begin
 				    -- Two times to reuse connecton according to doc.
 				    
 				    select val into retvnull from dblink_get_result(conn) as d(val text);
-		    	perform dblink_disconnect(conn);
-				perform dblink_connect(conn, connstr);
-		        
-				    
 			  		--RAISE NOTICE 'current_stmt_index =% , val2 status= %', current_stmt_index, retv;
 				EXCEPTION WHEN OTHERS THEN
 				    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT, v_detail = PG_EXCEPTION_DETAIL, v_hint = PG_EXCEPTION_HINT,
