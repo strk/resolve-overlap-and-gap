@@ -23,7 +23,7 @@ DECLARE
   v_detail text;
   v_hint text;
   v_context text;
-  job_loop_counter int = 0;
+  job_loop_counter int = 1;
   jd int;
   num_no_jobs_rounds int = 0;
 
@@ -102,6 +102,7 @@ BEGIN
           command_string := Format('SELECT topo_update.add_border_lines(%3$L,r.geom,%1$s,%4$L) FROM (
                   SELECT geom from  %2$s.edge) as r', _snap_tolerance, _topology_name || '_' || box_id, _topology_name, _table_name_result_prefix);
           EXECUTE command_string;
+          COMMIT;
           PERFORM topology.DropTopology (_topology_name || '_' || box_id);
           RAISE NOTICE 'Done saving and deleting data for cell at timeofday:% for layer %, with box_id % .', Timeofday(), _topology_name, box_id;
         END IF;  
@@ -129,7 +130,7 @@ BEGIN
 
 
     EXIT
-    WHEN num_jobs_done >= num_jobs or num_no_jobs_rounds > 2 or job_loop_counter > 400 or used_time > (60*15);
+    WHEN num_jobs_done >= num_jobs or num_no_jobs_rounds > 2 or job_loop_counter > 400 or used_time > (60*10);
 
     IF next_save_job is null and next_createdata_job is null THEN
       RAISE NOTICE 'sleep at to wait nest job to be ready num_jobs_done = %, num_jobs %, cell_job_type %', num_jobs_done, num_jobs, _cell_job_type;
