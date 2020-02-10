@@ -37,7 +37,7 @@ BEGIN
   RAISE NOTICE 'command_string %', command_string;
   EXECUTE command_string;
 
-  sql_to_run_grid := Format('Select resolve_overlap_gap_single_cell(%s,%s,%s,
+  sql_to_run_grid := Format('BEGIN; select resolve_overlap_gap_single_cell(%s,%s,%s,
   %s,%s,%s,%s,
   %s,%s,%s,
   %s,%s,%s,', 
@@ -61,7 +61,7 @@ BEGIN
  	from %s r', 
  	job_list_name_, 
  	Quote_literal(sql_to_run_grid), 
- 	Quote_literal(',' || _cell_job_type || ');'), 
+ 	Quote_literal(',' || _cell_job_type || '); COMMIT;'), 
  	Quote_literal(sql_to_block_cmd), 
  	Quote_literal(');'), 
  	overlapgap_grid_);
