@@ -80,12 +80,13 @@ BEGIN
     EXECUTE Format('ALTER table %s.face set unlogged', border_topo_info.topology_name);
     EXECUTE Format('ALTER table %s.relation set unlogged', border_topo_info.topology_name);
     
-  EXECUTE Format('CREATE INDEX ON %s.node(containing_face)', border_topo_info.topology_name);
-  EXECUTE Format('CREATE INDEX ON %s.relation(layer_id)', border_topo_info.topology_name);
-  EXECUTE Format('CREATE INDEX ON %s.relation(abs(element_id))', border_topo_info.topology_name);
-  EXECUTE Format('CREATE INDEX ON %s.edge_data USING GIST (geom)', border_topo_info.topology_name);
-  EXECUTE Format('CREATE INDEX ON %s.relation(element_id)', border_topo_info.topology_name);
-  EXECUTE Format('CREATE INDEX ON %s.relation(topogeo_id)', border_topo_info.topology_name);
+    
+  EXECUTE Format('CREATE INDEX idx_1 ON %1$s.node(containing_face)', border_topo_info.topology_name);
+  EXECUTE Format('CREATE INDEX idx_2 ON %1$s.relation(layer_id)', border_topo_info.topology_name);
+  EXECUTE Format('CREATE INDEX idx_3 ON %1$s.relation(abs(element_id))', border_topo_info.topology_name);
+  EXECUTE Format('CREATE INDEX idx_4 ON %1$s.edge_data USING GIST (geom)', border_topo_info.topology_name);
+  EXECUTE Format('CREATE INDEX idx_5 ON %1$s.relation(element_id)', border_topo_info.topology_name);
+  EXECUTE Format('CREATE INDEX idx_6 ON %1$s.relation(topogeo_id)', border_topo_info.topology_name);
 
     -- get the siple feature data both the line_types and the inner lines.
     -- the boundery linnes are saved in a table for later usage
@@ -117,6 +118,13 @@ BEGIN
     used_time := (Extract(EPOCH FROM (Clock_timestamp() - start_remove_small)));
     RAISE NOTICE 'Removed % clean small polygons for face_table_name % at % used_time: %', num_rows_removed, face_table_name, Clock_timestamp(), used_time;
  
+    IF box_id > 0 and MOD(box_id,50) = 0 THEN
+       EXECUTE Format('ANALYZE %s.edge_data', _topology_name);
+       EXECUTE Format('ANALYZE %s.node', _topology_name);
+       EXECUTE Format('ANALYZE %s.face', _topology_name);
+       EXECUTE Format('ANALYZE %s.relation', _topology_name);
+    END IF;
+
     command_string := Format('SELECT topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L) FROM (
                   SELECT geom from  %2$s.edge) as r', _snap_tolerance, border_topo_info.topology_name, ST_ExteriorRing (bb), _topology_name, _table_name_result_prefix);
     --RAISE NOTICE 'command_string %', command_string;
@@ -125,8 +133,18 @@ BEGIN
     -- remove small polygons in main table
     --              num_rows_removed := topo_update.do_remove_small_areas_no_block(border_topo_info.topology_name,'topo_ar5_forest_sysdata.face' ,'mbr','face_id',_job_list_name ,bb );
     --              RAISE NOTICE 'Removed % small polygons in face_table_name %', num_rows_removed, 'topo_ar5_forest_sysdata.face';
+    
+          EXECUTE Format('DROP INDEX %1$s.idx_1', border_topo_info.topology_name);
+  EXECUTE Format('DROP INDEX %1$s.idx_2', border_topo_info.topology_name);
+  EXECUTE Format('DROP INDEX %1$s.idx_3', border_topo_info.topology_name);
+  EXECUTE Format('DROP INDEX %1$s.idx_4', border_topo_info.topology_name);
+  EXECUTE Format('DROP INDEX %1$s.idx_5', border_topo_info.topology_name);
+  EXECUTE Format('DROP INDEX %1$s.idx_6', border_topo_info.topology_name);
+
   ELSIF _cell_job_type = 2 THEN
-    PERFORM topology.DropTopology (_topology_name || '_' || box_id);
+    IF ((SELECT Count(*) FROM topology.topology WHERE name = _topology_name || '_' || box_id) = 1) THEN
+       EXECUTE Format('SELECT topology.droptopology(%s)', Quote_literal(_topology_name || '_' || box_id));
+    END IF;
     
 
     -- on cell border
@@ -228,4 +246,5 @@ BEGIN
   --RETURN added_rows;
 END
 $$;
+
 
