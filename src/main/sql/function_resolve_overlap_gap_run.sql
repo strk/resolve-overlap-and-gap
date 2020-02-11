@@ -46,7 +46,7 @@ BEGIN
     
     LOOP
       stmts := '{}';
-      command_string := Format('SELECT ARRAY(SELECT sql_to_run as func_call FROM %s WHERE block_bb is null ORDER BY md5(cell_geo::Text) desc limit %s)', _job_list_name,_max_parallel_jobs*25);
+      command_string := Format('SELECT ARRAY(SELECT sql_to_run as func_call FROM %s WHERE block_bb is null ORDER BY md5(cell_geo::Text) desc limit %s)', _job_list_name,_max_parallel_jobs*12);
       RAISE NOTICE 'command_string %', command_string;
       EXECUTE command_string INTO stmts;
       EXIT
