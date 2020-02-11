@@ -53,10 +53,10 @@ BEGIN
       WHEN Array_length(stmts, 1) IS NULL
         OR stmts IS NULL;
          
-       EXECUTE Format('ANALYZE %s.edge_data', _topology_name);
-       EXECUTE Format('ANALYZE %s.node', _topology_name);
-       EXECUTE Format('ANALYZE %s.face', _topology_name);
-       EXECUTE Format('ANALYZE %s.relation', _topology_name);
+--       EXECUTE Format('ANALYZE %s.edge_data', _topology_name);
+--       EXECUTE Format('ANALYZE %s.node', _topology_name);
+--       EXECUTE Format('ANALYZE %s.face', _topology_name);
+--       EXECUTE Format('ANALYZE %s.relation', _topology_name);
   
       RAISE NOTICE 'array_length(stmts,1) %, stmts %', Array_length(stmts, 1), stmts;
       SELECT execute_parallel (stmts, _max_parallel_jobs) INTO call_result;
