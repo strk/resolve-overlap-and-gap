@@ -69,7 +69,7 @@ BEGIN
   -- the name of job_list table, this table is ued to track of done jobs
   job_list_name := table_name_result_prefix || '_job_list';
   -- Call init method to create content based create and main topology schema
-  command_string := Format('BEGIN; SELECT resolve_overlap_gap_init(%L,%s,%s,%s,%s,%s,%s,%s,%L);', table_name_result_prefix, Quote_literal(_table_to_resolve), Quote_literal(_table_geo_collumn_name), _table_srid, _max_rows_in_each_cell, Quote_literal(overlapgap_grid), Quote_literal(_topology_name), snap_tolerance,job_list_name);
+  command_string := Format('SELECT resolve_overlap_gap_init(%L,%s,%s,%s,%s,%s,%s,%s,%L);', table_name_result_prefix, Quote_literal(_table_to_resolve), Quote_literal(_table_geo_collumn_name), _table_srid, _max_rows_in_each_cell, Quote_literal(overlapgap_grid), Quote_literal(_topology_name), snap_tolerance,job_list_name);
   -- execute the string
   stmts[1] = command_string ;
   SELECT execute_parallel (stmts, 1) INTO call_result;
