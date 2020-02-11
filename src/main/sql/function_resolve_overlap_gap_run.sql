@@ -37,7 +37,7 @@ BEGIN
     --EXECUTE command_string;
     
     
-    SELECT ARRAY[command_string] into stmts;
+    stmts[1] = 'BEGIN; '||command_string||'; COMMIT;' ;
     SELECT execute_parallel (stmts, 1) INTO call_result;
     IF (call_result = FALSE) THEN
       RAISE EXCEPTION 'Failed to run resolve_overlap_gap_job_list for % with the following statement list %', _table_to_resolve, stmts;

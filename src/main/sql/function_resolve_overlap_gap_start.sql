@@ -71,7 +71,7 @@ BEGIN
   -- Call init method to create content based create and main topology schema
   command_string := Format('SELECT resolve_overlap_gap_init(%L,%s,%s,%s,%s,%s,%s,%s,%L);', table_name_result_prefix, Quote_literal(_table_to_resolve), Quote_literal(_table_geo_collumn_name), _table_srid, _max_rows_in_each_cell, Quote_literal(overlapgap_grid), Quote_literal(_topology_name), snap_tolerance,job_list_name);
   -- execute the string
-  stmts[1] = command_string ;
+  stmts[1] = 'BEGIN; '||command_string||'; COMMIT;' ;
   SELECT execute_parallel (stmts, 1) INTO call_result;
   IF (call_result = FALSE) THEN
     RAISE EXCEPTION 'Failed to run resolve_overlap_gap_init for % with the following statement list %', _table_to_resolve, stmts;
