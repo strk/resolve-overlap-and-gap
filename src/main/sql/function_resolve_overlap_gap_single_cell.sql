@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION resolve_overlap_gap_single_cell (input_table_name character varying, input_table_geo_column_name character varying, input_table_pk_column_name character varying, _table_name_result_prefix varchar, _topology_name character varying, _srid int, _utm boolean, _simplify_tolerance double precision, _snap_tolerance double precision, _do_chaikins boolean, _min_area_to_keep float, _job_list_name character varying, overlapgap_grid varchar, bb geometry, _cell_job_type int -- add lines 1 inside cell, 2 boderlines, 3 exract simple
-) RETURNS void
+) RETURNS int
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -34,7 +34,7 @@ BEGIN
   EXECUTE command_string INTO is_done;
   IF is_done = 1 THEN
     RAISE NOTICE 'Job is_done for  : %', ST_astext (bb);
-    RETURN;
+    RETURN 0;
   END IF;
   start_time := Clock_timestamp();
   RAISE NOTICE 'enter work at timeofday:% for layer %, with _cell_job_type %', Timeofday(), _topology_name || '_' || box_id, _cell_job_type;
@@ -159,7 +159,7 @@ BEGIN
     command_string := Format('select count(*) from (select * from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) for update SKIP LOCKED) as r;', _job_list_name, area_to_block);
     EXECUTE command_string INTO num_boxes_free;
     IF num_boxes_intersect != num_boxes_free THEN
-      RETURN;
+      RETURN 0;
     END IF;
     border_topo_info.topology_name := _topology_name;
     -- NB We have to use fixed snap to here to be sure that lines snapp
@@ -245,7 +245,7 @@ BEGIN
   END IF;
   PERFORM topo_update.clear_blocked_area (bb, _job_list_name);
   RAISE NOTICE 'leave work at timeofday:% for layer %, with _cell_job_type %', Timeofday(), border_topo_info.topology_name, _cell_job_type;
-  --RETURN added_rows;
+  RETURN added_rows;
 END
 $$;
 
