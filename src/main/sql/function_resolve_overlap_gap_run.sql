@@ -81,7 +81,7 @@ BEGIN
       WHEN Array_length(stmts, 1) IS NULL
         OR stmts IS NULL;
       RAISE NOTICE 'array_length(stmts,1) %, stmts %', Array_length(stmts, 1), stmts;
-      SELECT execute_parallel (stmts, _max_parallel_jobs) INTO call_result;
+      SELECT execute_parallel (stmts, _max_parallel_jobs,true) INTO call_result;
       IF (call_result = FALSE) THEN
         RAISE EXCEPTION 'Failed to run overlap and gap for % with the following statement list %', _table_to_resolve, stmts;
       END IF;
