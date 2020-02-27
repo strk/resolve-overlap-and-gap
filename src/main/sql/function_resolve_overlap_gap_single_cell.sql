@@ -141,9 +141,7 @@ BEGIN
     RAISE NOTICE 'Num lines found % in box %', tmp_counter, box_id ;
     
     
-    command_string := Format('select ST_Envelope(ST_Union(i.%1$s)) 
-      FROM tmp_simplified_border_lines s, %2$s i WHERE ST_Intersects(s.geo,i.%1$s)',
-      input_table_geo_column_name, input_table_name);  
+    command_string := Format('select ST_Envelope(ST_Union(s.geo)) FROM tmp_simplified_border_lines s');  
     EXECUTE command_string into area_to_block;
     
     IF area_to_block = null THEN
@@ -151,8 +149,6 @@ BEGIN
     ELSE 
        area_to_block := ST_Union(area_to_block,ST_BUffer (bb, glue_snap_tolerance_fixed));
     END IF;
-    
-
     
     command_string := Format('select count(*) from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L);',
     _job_list_name, area_to_block);
