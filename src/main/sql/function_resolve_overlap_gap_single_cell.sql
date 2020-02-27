@@ -150,7 +150,8 @@ BEGIN
     -- get the siple feature data both the line_types and the inner lines.
     -- the boundery linnes are saved in a table for later usage
     DROP TABLE IF EXISTS tmp_simplified_border_lines;
-    command_string := Format('create temp table tmp_simplified_border_lines as (select g.* FROM topo_update.get_simplified_border_lines(%L,%L,%L,%L,%L,%L) g)', input_table_name, input_table_geo_column_name, bb, _simplify_tolerance, _do_chaikins, _table_name_result_prefix);
+    command_string := Format('create temp table tmp_simplified_border_lines as (select g.* FROM topo_update.get_simplified_border_lines(%L,%L,%L,%L,%L,%L) g)', 
+    input_table_name, input_table_geo_column_name, bb, _simplify_tolerance, _do_chaikins, _table_name_result_prefix);
     RAISE NOTICE 'command_string %', command_string;
     EXECUTE command_string;
     
@@ -219,7 +220,31 @@ BEGIN
     -- test with  area to block like bb
     -- area_to_block := bb;
     -- count the number of rows that intersects
-    area_to_block := ST_BUffer (bb, glue_snap_tolerance_fixed);
+    
+  
+    
+    DROP TABLE IF EXISTS tmp_simplified_border_lines;
+    
+    command_string := Format('create temp table tmp_simplified_border_lines as (select * from topo_update.get_left_over_borders(%1$L,%2$L,%3$L,%4$L))', 
+    overlapgap_grid,
+    input_table_geo_column_name,
+    bb,
+    _table_name_result_prefix);
+    EXECUTE command_string ;
+    
+    command_string := Format('select ST_Envelope(ST_Union(i.%1$s)) 
+      FROM tmp_simplified_border_lines s, %2$s i WHERE ST_Intersects(s.geo,i.%1$s)',
+      input_table_geo_column_name, input_table_name);  
+    EXECUTE command_string into area_to_block;
+    
+    IF area_to_block = null THEN
+       area_to_block := ST_BUffer (bb, glue_snap_tolerance_fixed);
+    ELSE 
+       area_to_block := ST_Union(area_to_block,ST_BUffer (bb, glue_snap_tolerance_fixed));
+    END IF;
+    
+
+    
     command_string := Format('select count(*) from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L);', _job_list_name, area_to_block);
     EXECUTE command_string INTO num_boxes_intersect;
     command_string := Format('select count(*) from (select * from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) for update SKIP LOCKED) as r;', _job_list_name, area_to_block);
@@ -227,6 +252,7 @@ BEGIN
     IF num_boxes_intersect != num_boxes_free THEN
       RETURN;
     END IF;
+
     
 
     border_topo_info.topology_name := _topology_name;
@@ -317,7 +343,7 @@ BEGIN
     RAISE NOTICE 'very long a set of lines % time with geo for bb % ', used_time, bb;
     EXECUTE Format('INSERT INTO %s (execute_time, info, sql, geo) VALUES (%s, %L, %L, %L)', _table_name_result_prefix || '_long_time_log2', used_time, 'simplefeature_c2_topo_surface_border_retry', command_string, bb);
   END IF;
-  PERFORM topo_update.clear_blocked_area (area_to_block, _job_list_name);
+  PERFORM topo_update.clear_blocked_area (bb, _job_list_name);
   RAISE NOTICE 'leave work at timeofday:% for layer %, with _cell_job_type %', Timeofday(), border_topo_info.topology_name, _cell_job_type;
   --RETURN added_rows;
 END
