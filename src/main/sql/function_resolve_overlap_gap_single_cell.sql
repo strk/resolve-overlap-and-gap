@@ -222,7 +222,6 @@ BEGIN
     -- count the number of rows that intersects
     
   
-    
     DROP TABLE IF EXISTS tmp_simplified_border_lines;
     
     command_string := Format('create temp table tmp_simplified_border_lines as (select * from topo_update.get_left_over_borders(%1$L,%2$L,%3$L,%4$L))', 
@@ -265,6 +264,16 @@ BEGIN
     END IF;
     -- NB We have to use fixed snap to here to be sure that lines snapp
     EXECUTE command_string;
+
+    command_string := Format('DELETE FROM %1$s lg3
+ 	where ST_IsValid(lg3.geo) and ST_CoveredBy(lg3.geo,%2$L)',
+ 	_table_name_result_prefix || '_border_line_segments',
+ 	area_to_block);
+ 	-- EXECUTE command_string;
+
+
+
+    
   ELSIF _cell_job_type = 4 THEN
     -- Drop/Create a temp to hold data temporay for job
     EXECUTE Format('DROP TABLE IF EXISTS %s', temp_table_name);
