@@ -224,10 +224,33 @@ BEGIN
   
   --------------------------------------------------------------------------  
   ELSIF _cell_job_type = 2 THEN
+    DROP TABLE IF EXISTS tmp_simplified_border_lines;
+   
+    command_string := Format('create temp table tmp_simplified_border_lines as (select g.* FROM topo_update.get_simplified_insidecell_polygons(%L,%L,%L,%L,%L,%L) g)', 
+    input_table_name, input_table_geo_column_name, bb, _simplify_tolerance, _do_chaikins, _table_name_result_prefix);
+ 
+    EXECUTE command_string ;
+    
+    command_string := Format('SELECT count(*) from tmp_simplified_border_lines');
+    EXECUTE command_string into tmp_counter;
+    RAISE NOTICE 'Num lines found % in box %', tmp_counter, box_id ;
+    
+    
+    area_to_block := bb;
+
+    
+    command_string := Format('select count(*) from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L);',
+    _job_list_name, area_to_block);
+    EXECUTE command_string INTO num_boxes_intersect;
+    command_string := Format('select count(*) from (select * from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) for update SKIP LOCKED) as r;', 
+    _job_list_name, area_to_block);
+    EXECUTE command_string INTO num_boxes_free;
+    IF num_boxes_intersect != num_boxes_free THEN
+      RETURN;
+    END IF;
+   
+   
     border_topo_info.topology_name := _topology_name || '_' || box_id;
-    RAISE NOTICE 'use border_topo_info.topology_name %', border_topo_info.topology_name;
-   border_topo_info.topology_name := _topology_name || '_' || box_id;
-    RAISE NOTICE 'use border_topo_info.topology_name %', border_topo_info.topology_name;
     IF ((SELECT Count(*) FROM topology.topology WHERE name = border_topo_info.topology_name) = 1) THEN
        EXECUTE Format('SELECT topology.droptopology(%s)', Quote_literal(border_topo_info.topology_name));
     END IF;
@@ -240,38 +263,30 @@ BEGIN
     EXECUTE Format('ALTER table %s.face set unlogged', border_topo_info.topology_name);
     EXECUTE Format('ALTER table %s.relation set unlogged', border_topo_info.topology_name);
     
-  EXECUTE Format('CREATE INDEX ON %s.node(containing_face)', border_topo_info.topology_name);
-  EXECUTE Format('CREATE INDEX ON %s.relation(layer_id)', border_topo_info.topology_name);
-  EXECUTE Format('CREATE INDEX ON %s.relation(abs(element_id))', border_topo_info.topology_name);
-  EXECUTE Format('CREATE INDEX ON %s.edge_data USING GIST (geom)', border_topo_info.topology_name);
-  EXECUTE Format('CREATE INDEX ON %s.relation(element_id)', border_topo_info.topology_name);
-  EXECUTE Format('CREATE INDEX ON %s.relation(topogeo_id)', border_topo_info.topology_name);
+    EXECUTE Format('CREATE INDEX ON %s.node(containing_face)', border_topo_info.topology_name);
+    EXECUTE Format('CREATE INDEX ON %s.relation(layer_id)', border_topo_info.topology_name);
+    EXECUTE Format('CREATE INDEX ON %s.relation(abs(element_id))', border_topo_info.topology_name);
+    EXECUTE Format('CREATE INDEX ON %s.edge_data USING GIST (geom)', border_topo_info.topology_name);
+    EXECUTE Format('CREATE INDEX ON %s.relation(element_id)', border_topo_info.topology_name);
+    EXECUTE Format('CREATE INDEX ON %s.relation(topogeo_id)', border_topo_info.topology_name);
 
-    -- get the siple feature data both the line_types and the inner lines.
-    -- the boundery linnes are saved in a table for later usage
-    DROP TABLE IF EXISTS tmp_simplified_border_lines;
-    command_string := Format('create temp table tmp_simplified_border_lines as (select g.* FROM topo_update.get_simplified_border_lines(%L,%L,%L,%L,%L,%L) g)', 
-    input_table_name, input_table_geo_column_name, bb, _simplify_tolerance, _do_chaikins, _table_name_result_prefix);
-    RAISE NOTICE 'command_string %', command_string;
-    EXECUTE command_string;
-    
-    -- add the glue line with no/small tolerance
-    border_topo_info.snap_tolerance := glue_snap_tolerance_fixed;
-    command_string := Format('SELECT topo_update.create_nocutline_edge_domain_obj_retry(json::Text, %L) 
-                  from tmp_simplified_border_lines g where line_type = 1', border_topo_info);
-    --RAISE NOTICE 'command_string %', command_string;
-    EXECUTE command_string;
 
     -- using the input tolreance for adding
     border_topo_info.snap_tolerance := snap_tolerance_fixed;
     command_string := Format('SELECT topo_update.create_nocutline_edge_domain_obj_retry(json::Text, %L) 
-                  from tmp_simplified_border_lines g where line_type = 0', border_topo_info);
+                  from tmp_simplified_border_lines g', border_topo_info);
     --RAISE NOTICE 'command_string %', command_string;
     EXECUTE command_string;
 
     face_table_name = border_topo_info.topology_name || '.face';
     start_remove_small := Clock_timestamp();
-    RAISE NOTICE 'Start clean small polygons for face_table_name % at %', face_table_name, Clock_timestamp();
+    
+    command_string := Format('SELECT count(*) from %1$s.edge_data', border_topo_info.topology_name);
+    EXECUTE command_string into tmp_counter;
+   
+    
+    
+    RAISE NOTICE 'Start clean small polygons for face_table_name % at % with % edge_data.', face_table_name, Clock_timestamp(), tmp_counter ;
     -- remove small polygons in temp
     num_rows_removed := topo_update.do_remove_small_areas_no_block (border_topo_info.topology_name, _min_area_to_keep, face_table_name, bb,
       _utm);
@@ -283,98 +298,15 @@ BEGIN
 
     EXECUTE command_string into has_edges;
     IF (has_edges) THEN
-      has_edges_temp_table_name := _topology_name||'.edge_data_tmp_' || box_id;
-      
-      command_string := Format('create unlogged table %1$s as (SELECT geom from  %2$s.edge_data)',
-      has_edges_temp_table_name,
-      border_topo_info.topology_name);
+      command_string := Format('SELECT topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L) FROM (SELECT geom from %2$s.edge_data) as r', 
+      _snap_tolerance, border_topo_info.topology_name, ST_ExteriorRing (bb), _topology_name, _table_name_result_prefix);
       EXECUTE command_string;
-      
     END IF;
-
-
     execute Format('SET CONSTRAINTS ALL IMMEDIATE');
     PERFORM topology.DropTopology (border_topo_info.topology_name);
+
     
   ELSIF _cell_job_type = 3 THEN
-
-    has_edges_temp_table_name := _topology_name||'.edge_data_tmp_' || box_id;
-    command_string := Format('SELECT EXISTS(SELECT 1 from to_regclass(%L) where to_regclass is not null)',
-    has_edges_temp_table_name);
-    EXECUTE command_string into has_edges;
-    RAISE NOTICE 'cell % cell_job_type %, has_edges %, _loop_number %', box_id, _cell_job_type, has_edges, _loop_number;
-
-    IF (has_edges) THEN
-     IF _loop_number = 1 THEN 
-       command_string := Format('SELECT topology.TopoGeo_addLinestring(%3$L,r.geom,%1$s) FROM (SELECT geom from %2$s) as r', _snap_tolerance, has_edges_temp_table_name, _topology_name);
-     ELSE
-       command_string := Format('SELECT topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L) FROM (SELECT geom from %2$s) as r', _snap_tolerance, has_edges_temp_table_name, ST_ExteriorRing (bb), _topology_name, _table_name_result_prefix);
-     END IF;
-     EXECUTE command_string;
-      
-     command_string := Format('drop table %s',has_edges_temp_table_name);
-     EXECUTE command_string;
-    END IF;
-  ELSIF _cell_job_type = 4 THEN
-    -- on cell border
-    -- test with  area to block like bb
-    -- area_to_block := bb;
-    -- count the number of rows that intersects
-    
-  
-    DROP TABLE IF EXISTS tmp_simplified_border_lines;
-    
-    command_string := Format('create temp table tmp_simplified_border_lines as (select * from topo_update.get_left_over_borders(%1$L,%2$L,%3$L,%4$L))', 
-    overlapgap_grid,
-    input_table_geo_column_name,
-    bb,
-    _table_name_result_prefix);
-    EXECUTE command_string ;
-    
-    command_string := Format('select ST_Envelope(ST_Union(i.%1$s)) 
-      FROM tmp_simplified_border_lines s, %2$s i WHERE ST_Intersects(s.geo,i.%1$s)',
-      input_table_geo_column_name, input_table_name);  
-    EXECUTE command_string into area_to_block;
-    
-    IF area_to_block = null THEN
-       area_to_block := ST_BUffer (bb, glue_snap_tolerance_fixed);
-    ELSE 
-       area_to_block := ST_Union(area_to_block,ST_BUffer (bb, glue_snap_tolerance_fixed));
-    END IF;
-    
-
-    
-    command_string := Format('select count(*) from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L);', _job_list_name, area_to_block);
-    EXECUTE command_string INTO num_boxes_intersect;
-    command_string := Format('select count(*) from (select * from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) for update SKIP LOCKED) as r;', _job_list_name, area_to_block);
-    EXECUTE command_string INTO num_boxes_free;
-    IF num_boxes_intersect != num_boxes_free THEN
-      RETURN;
-    END IF;
-
-    
-
-    border_topo_info.topology_name := _topology_name;
-    IF _loop_number = 1 THEN 
-      command_string := Format('SELECT topology.TopoGeo_addLinestring(%1$L,geo,%3$s) from topo_update.get_left_over_borders(%4$L,%6$L,%2$L,%5$L)', 
-      _topology_name, bb, snap_tolerance_fixed, overlapgap_grid, _table_name_result_prefix, input_table_geo_column_name);
-    ELSE
-      command_string := Format('SELECT topo_update.add_border_lines(%1$L,geo,%3$s,%5$L) from topo_update.get_left_over_borders(%4$L,%6$L,%2$L,%5$L)', 
-      _topology_name, bb, snap_tolerance_fixed, overlapgap_grid, _table_name_result_prefix, input_table_geo_column_name);
-    END IF;
-    -- NB We have to use fixed snap to here to be sure that lines snapp
-    EXECUTE command_string;
-
-    command_string := Format('DELETE FROM %1$s lg3
- 	where ST_IsValid(lg3.geo) and ST_CoveredBy(lg3.geo,%2$L)',
- 	_table_name_result_prefix || '_border_line_segments',
- 	area_to_block);
- 	-- EXECUTE command_string;
-
-
-
-    
-  ELSIF _cell_job_type = 5 THEN
     -- Drop/Create a temp to hold data temporay for job
     EXECUTE Format('DROP TABLE IF EXISTS %s', temp_table_name);
     -- Create the temp for result simple feature result table  as copy of the input table

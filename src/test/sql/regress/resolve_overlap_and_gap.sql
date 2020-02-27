@@ -11,8 +11,6 @@ CALL resolve_overlap_gap_run('test_data.overlap_gap_input_t2','c1','geom',4258,f
 
 SELECT 'degrees_check_failed_lines', count(geo) from test_topo_t2.overlap_gap_input_t2_no_cut_line_failed;
 
-SELECT 'degrees_check_border_lines', count(geo) from test_topo_t2.overlap_gap_input_t2_border_line_segments;
-
 SELECT 'degrees_check_added_lines', count(geom) from test_topo_t2.edge;
 
 SELECT 'degrees_check_added_faces', count(mbr) from test_topo_t2.face;
@@ -32,8 +30,6 @@ SELECT 'degrees', topology.droptopology('test_topo_t2');
 CALL resolve_overlap_gap_run('test_data.overlap_gap_input_t3','c1t3','geo',25833,true,'test_topo_t3',1,5,4);
 
 SELECT 'utm_check_failed_lines', count(geo) from test_topo_t3.overlap_gap_input_t3_no_cut_line_failed;
-
-SELECT 'utm_check_border_lines', count(geo) from test_topo_t3.overlap_gap_input_t3_border_line_segments;
 
 SELECT 'utm_check_added_lines', count(geom) from test_topo_t3.edge;
 

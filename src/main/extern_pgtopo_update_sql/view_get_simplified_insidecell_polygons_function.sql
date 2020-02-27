@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION topo_update.get_simplified_cellborder_polygons (
+CREATE OR REPLACE FUNCTION topo_update.get_simplified_insidecell_polygons (
 _input_table_name varchar, 
 _input_table_geo_column_name varchar, 
 _bb geometry, _snap_tolerance float8, 
@@ -40,13 +40,13 @@ BEGIN
   -- get the all the line parts based the bb_boundary_outer
   command_string := Format('CREATE temp table tmp_data_all_lines AS 
  	WITH rings AS (
- 	SELECT ST_ExteriorRing((ST_DumpRings((st_dump(%3$s)).geom)).geom) as geom
+ 	SELECT ST_ExteriorRing((ST_DumpRings((st_dump(%2$s)).geom)).geom) as geom
  	FROM %1$s v
- 	where ST_Intersects(v.%3$s,%2$L) and ST_StartPoint(ST_ExteriorRing(v.%3$s)) && %4$L
+ 	where ST_CoveredBy(v.%2$s,%3$L)
  	),
  	lines as (select distinct (ST_Dump(geom)).geom as geom from rings)
  	select geom from lines 
- 	where  ST_IsEmpty(geom) is false', _input_table_name, ST_ExteriorRing(_bb), _input_table_geo_column_name, _bb);
+ 	where  ST_IsEmpty(geom) is false', _input_table_name, _input_table_geo_column_name, _bb);
   EXECUTE command_string;
 
   GET DIAGNOSTICS rows_affected = ROW_COUNT;
