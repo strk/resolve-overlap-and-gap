@@ -30,6 +30,12 @@ DECLARE
   failed_to_insert boolean;
   feat json;
   rec record;
+  v_state text;
+  v_msg text;
+  v_detail text;
+  v_hint text;
+  v_context text;
+
 BEGIN
   start_time := Clock_timestamp();
   -- TODO totally rewrite this code
@@ -37,58 +43,28 @@ BEGIN
   feat := json_feature::Json;
   json_input_structure.input_geo := ST_GeomFromGeoJSON (feat ->> 'geometry');
   start_tolerance = border_topo_info.snap_tolerance;
+
+  
   BEGIN
     --RAISE NOTICE 'work start with %,  containing % points', json_input_structure.input_geo, ST_NumPoints (json_input_structure.input_geo);
     --test remove reptead points
     inGeom := ST_RemoveRepeatedPoints (json_input_structure.input_geo, start_tolerance);
     json_input_structure.input_geo := inGeom;
-    IF ST_NumPoints (json_input_structure.input_geo) < 1000 THEN
       --			RAISE NOTICE 'work start, ok :% border_layer_id %, with a line containing % points', start_time, border_topo_info.border_layer_id, ST_NumPoints(json_input_structure.input_geo);
-      PERFORM topo_update.create_nocutline_edge_domain_try_one (border_topo_info, json_input_structure);
-    ELSE
-      RAISE NOTICE 'work start, to big:% border_layer_id %, with a line containing % points', start_time, border_topo_info.border_layer_id, ST_NumPoints (json_input_structure.input_geo);
-      json_input_structure_tmp := topo_update.handle_input_json_props (json_feature::Json, server_json_feature::Json, border_topo_info.srid);
-      inGeom := json_input_structure.input_geo;
-      LOOP
-        counter := counter + 1000;
-        -- some computations
-        IF counter > (ST_NPoints (inGeom) - 1) THEN
-          EXIT;
-          -- exit loop
-        ELSE
-          apoint := Array_append(apoint, ST_PointN (inGeom, counter));
-          --ST_PointN(g,counter);
-        END IF;
-      END LOOP;
-      spltt_line := ST_Split (inGeom, ST_Multi (ST_Collect (apoint)));
-      DROP TABLE IF EXISTS line_list_tmp;
-      CREATE temp TABLE line_list_tmp AS (
-        SELECT (ST_Dump (spltt_line ) ).geom AS line_part
-        );
-    FOR rec IN
-    SELECT *
-    FROM line_list_tmp LOOP
-        RAISE NOTICE 'rec %', ST_Length (rec.line_part);
-        json_input_structure_tmp.input_geo = rec.line_part;
-        PERFORM topo_update.create_nocutline_edge_domain_try_one (border_topo_info, json_input_structure_tmp);
-      END LOOP;
-  END IF;
-  done_time := Clock_timestamp();
-  --	RAISE NOTICE 'work done row :% border_layer_id %, using % sec', done_time, border_topo_info.border_layer_id, (EXTRACT(EPOCH FROM (done_time - start_time)));
-EXCEPTION
+    PERFORM topo_update.create_nocutline_edge_domain_try_one (border_topo_info, json_input_structure);
+  EXCEPTION
   WHEN OTHERS THEN
-    RAISE NOTICE 'failed ::::::1 %', border_topo_info.border_layer_id;
+
+  	GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT, v_detail = PG_EXCEPTION_DETAIL, v_hint = PG_EXCEPTION_HINT,
+                    v_context = PG_EXCEPTION_CONTEXT;
+     RAISE NOTICE 'Failed to border_topo_info.border_layer_id  % , geo is valid % state  : %  message: % detail : % hint   : % context: %', 
+        border_topo_info.border_layer_id, ST_IsValid(json_input_structure.input_geo), 
+        v_state, v_msg, v_detail, v_hint, v_context;
+		
+
     counter := 0;
     json_input_structure_tmp := topo_update.handle_input_json_props (json_feature::Json, server_json_feature::Json, border_topo_info.srid);
     inGeom := json_input_structure.input_geo;
-    --	    BEGIN
-    --		inGeom := ST_RemoveRepeatedPoints(inGeom,start_tolerance);
-    --		json_input_structure_tmp.input_geo := inGeom;
-    --		perform topo_update.create_nocutline_edge_domain_try_one( border_topo_info, json_input_structure_tmp);
-    --		return;
-    --	    EXCEPTION WHEN OTHERS THEN
-    --	    RAISE NOTICE 'failed with ST_RemoveRepeatedPoints % : %', ST_AsText(inGeom), tolerance;
-    --	    END;
     FOR i IN 1.. (ST_NPoints (inGeom) - 1)
     LOOP
       border_topo_info.snap_tolerance := start_tolerance;
