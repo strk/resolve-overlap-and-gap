@@ -131,11 +131,10 @@ BEGIN
    
     DROP TABLE IF EXISTS tmp_simplified_border_lines;
    
-    command_string := Format('create temp table tmp_simplified_border_lines as (select g.* FROM topo_update.get_simplified_cellborder_polygons(%L,%L,%L,%L,%L,%L) g)', 
+    command_string := Format('create temp table tmp_simplified_border_lines as (select g.* , ST_NPOints(geo) as num_points FROM topo_update.get_simplified_cellborder_polygons(%L,%L,%L,%L,%L,%L) g)', 
     input_table_name, input_table_geo_column_name, bb, _simplify_tolerance, _do_chaikins, _table_name_result_prefix);
- 
     EXECUTE command_string ;
-    
+ 
     command_string := Format('SELECT count(*) from tmp_simplified_border_lines');
     EXECUTE command_string into tmp_counter;
     RAISE NOTICE 'Num lines found % in box %', tmp_counter, box_id ;
@@ -165,7 +164,7 @@ BEGIN
     -- using the input tolreance for adding
     border_topo_info.snap_tolerance := snap_tolerance_fixed;
     command_string := Format('SELECT topo_update.create_nocutline_edge_domain_obj_retry(json::Text, %L) 
-                  from tmp_simplified_border_lines g', border_topo_info);
+                  from tmp_simplified_border_lines g order by ST_Isclosed(geo) desc, num_points desc', border_topo_info);
     --RAISE NOTICE 'command_string %', command_string;
     EXECUTE command_string;
 
@@ -191,10 +190,11 @@ BEGIN
     IF (has_edges) THEN
       has_edges_temp_table_name := _topology_name||'.edge_data_tmp_' || box_id;
       
-      command_string := Format('create unlogged table %1$s as (SELECT geom from  %2$s.edge_data)',
+      command_string := Format('create unlogged table %1$s as (SELECT geom, ST_NPoints(geom) as num_points from  %2$s.edge_data)',
       has_edges_temp_table_name,
       border_topo_info.topology_name);
       EXECUTE command_string;
+      
       
     END IF;
 
@@ -228,9 +228,9 @@ BEGIN
    
   
      IF _loop_number = 1 THEN 
-       command_string := Format('SELECT topology.TopoGeo_addLinestring(%3$L,r.geom,%1$s) FROM (SELECT geom from %2$s) as r', _snap_tolerance, has_edges_temp_table_name, _topology_name);
+       command_string := Format('SELECT topology.TopoGeo_addLinestring(%3$L,r.geom,%1$s) FROM (SELECT geom from %2$s order by ST_Isclosed(geom) desc, num_points desc) as r ', _snap_tolerance, has_edges_temp_table_name, _topology_name);
      ELSE
-       command_string := Format('SELECT topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L) FROM (SELECT geom from %2$s) as r', _snap_tolerance, has_edges_temp_table_name, ST_ExteriorRing (bb), _topology_name, _table_name_result_prefix);
+       command_string := Format('SELECT topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L) FROM (SELECT geom from %2$s order by ST_Isclosed(geom) desc, num_points desc) as r', _snap_tolerance, has_edges_temp_table_name, ST_ExteriorRing (bb), _topology_name, _table_name_result_prefix);
      END IF;
      EXECUTE command_string;
       
@@ -242,7 +242,7 @@ BEGIN
   ELSIF _cell_job_type = 3 THEN
     DROP TABLE IF EXISTS tmp_simplified_border_lines;
    
-    command_string := Format('create temp table tmp_simplified_border_lines as (select g.* FROM topo_update.get_simplified_insidecell_polygons(%L,%L,%L,%L,%L,%L) g)', 
+    command_string := Format('create temp table tmp_simplified_border_lines as (select g.*, ST_NPOints(geo) as num_points  FROM topo_update.get_simplified_insidecell_polygons(%L,%L,%L,%L,%L,%L) g)', 
     input_table_name, input_table_geo_column_name, bb, _simplify_tolerance, _do_chaikins, _table_name_result_prefix);
  
     EXECUTE command_string ;
@@ -290,7 +290,7 @@ BEGIN
     -- using the input tolreance for adding
     border_topo_info.snap_tolerance := snap_tolerance_fixed;
     command_string := Format('SELECT topo_update.create_nocutline_edge_domain_obj_retry(json::Text, %L) 
-                  from tmp_simplified_border_lines g', border_topo_info);
+                  from tmp_simplified_border_lines g order by ST_Isclosed(geo) desc, num_points desc', border_topo_info);
     --RAISE NOTICE 'command_string %', command_string;
     EXECUTE command_string;
 
@@ -316,7 +316,7 @@ BEGIN
     IF (has_edges) THEN
       has_edges_temp_table_name := _topology_name||'.edge_data_tmp_' || box_id;
       
-      command_string := Format('create unlogged table %1$s as (SELECT geom from  %2$s.edge_data)',
+      command_string := Format('create unlogged table %1$s as (SELECT geom, ST_NPoints(geom) as num_points from  %2$s.edge_data)',
       has_edges_temp_table_name,
       border_topo_info.topology_name);
       EXECUTE command_string;
@@ -356,9 +356,9 @@ BEGIN
    
   
      IF _loop_number = 1 THEN 
-       command_string := Format('SELECT topology.TopoGeo_addLinestring(%3$L,r.geom,%1$s) FROM (SELECT geom from %2$s) as r', _snap_tolerance, has_edges_temp_table_name, _topology_name);
+       command_string := Format('SELECT topology.TopoGeo_addLinestring(%3$L,r.geom,%1$s) FROM (SELECT geom from %2$s order by ST_Isclosed(geom) desc, num_points desc) as r', _snap_tolerance, has_edges_temp_table_name, _topology_name);
      ELSE
-       command_string := Format('SELECT topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L) FROM (SELECT geom from %2$s) as r', _snap_tolerance, has_edges_temp_table_name, ST_ExteriorRing (bb), _topology_name, _table_name_result_prefix);
+       command_string := Format('SELECT topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L) FROM (SELECT geom from %2$s order by ST_Isclosed(geom) desc, num_points desc) as r', _snap_tolerance, has_edges_temp_table_name, ST_ExteriorRing (bb), _topology_name, _table_name_result_prefix);
      END IF;
      EXECUTE command_string;
       
