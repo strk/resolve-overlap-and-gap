@@ -227,18 +227,17 @@ BEGIN
 
     
     
-    -- add the glue line with no/small tolerance
+    -- add cell borders with a verry small tolereance in temp geo
     border_topo_info.snap_tolerance := glue_snap_tolerance_fixed;
-    --command_string := Format('SELECT topo_update.create_nocutline_edge_domain_obj_retry(json::Text, %L) from tmp_simplified_border_lines g where line_type = 1', border_topo_info);
-    command_string := Format('SELECT topo_update.add_border_lines(%1$L,r.geom,%2$s,%3$L) FROM (select geo as geom from tmp_simplified_border_lines g where line_type = 1) as r',
-    border_topo_info.topology_name, glue_snap_tolerance_fixed, _table_name_result_prefix);
+    command_string := Format('SELECT topo_update.add_border_lines(%1$L,%4$L,%2$s,%3$L) ',
+    border_topo_info.topology_name, glue_snap_tolerance_fixed, _table_name_result_prefix, ST_ExteriorRing(_bb));
     EXECUTE command_string;
+
 
     -- using the input tolreance for adding
     border_topo_info.snap_tolerance := snap_tolerance_fixed;
-    --command_string := Format('SELECT topo_update.create_nocutline_edge_domain_obj_retry(json::Text, %L) from tmp_simplified_border_lines g where line_type = 0 order by is_closed desc, num_points desc', border_topo_info);
-    --RAISE NOTICE 'command_string %', command_string;
-    command_string := Format('SELECT topo_update.add_border_lines(%1$L,r.geom,%2$s,%3$L) FROM (select geo as geom from tmp_simplified_border_lines g where line_type = 0) as r',
+    command_string := Format('SELECT topo_update.add_border_lines(%1$L,r.geom,%2$s,%3$L) 
+                              FROM (select geo as geom from tmp_simplified_border_lines g where line_type = 0) as r',
     border_topo_info.topology_name, border_topo_info.snap_tolerance, _table_name_result_prefix);
     EXECUTE command_string;
 
@@ -332,21 +331,12 @@ BEGIN
     IF (has_edges) THEN
       has_edges_temp_table_name := _topology_name||'.edge_data_tmp_' || box_id;
 
-      IF (_utm = false) THEN
-       command_string := Format('create unlogged table %1$s as 
-       (SELECT geom, ST_IsClosed(geom) as is_closed, ST_NPoints(geom) as num_points 
-       from  %2$s.edge_data where ST_Length(geom,true) >= %3$s)',
-       has_edges_temp_table_name,
-       border_topo_info.topology_name,
-       min_length_line);
-      ELSE
-       command_string := Format('create unlogged table %1$s as 
-       (SELECT geom, ST_IsClosed(geom) as is_closed, ST_NPoints(geom) as num_points 
-       from  %2$s.edge_data where ST_Length(geom) >= %3$s)',
-       has_edges_temp_table_name,
-       border_topo_info.topology_name,
-       min_length_line);
-      END IF;
+      command_string := Format('create unlogged table %1$s as 
+      (SELECT geom, ST_IsClosed(geom) as is_closed, ST_NPoints(geom) as num_points 
+      from  %2$s.edge_data where ST_intersects(geom,%3$L))',
+      has_edges_temp_table_name,
+      border_topo_info.topology_name,
+      ST_expand(_bb,snap_tolerance_fixed*-1));
 
       
       EXECUTE command_string;
@@ -359,106 +349,32 @@ BEGIN
     PERFORM topology.DropTopology (border_topo_info.topology_name);
     
     DROP TABLE IF EXISTS tmp_simplified_border_lines;
- 
+
   ELSIF _cell_job_type = 2 THEN
-
-    has_edges_temp_table_name := _topology_name||'.edge_data_tmp_' || box_id;
-    command_string := Format('SELECT EXISTS(SELECT 1 from to_regclass(%L) where to_regclass is not null)',has_edges_temp_table_name);
-    
-    EXECUTE command_string into has_edges;
-    RAISE NOTICE 'cell % cell_job_type %, has_edges %, _loop_number %', box_id, _cell_job_type, has_edges, _loop_number;
-    IF (has_edges) THEN
-     IF _loop_number = 1 THEN 
-       -- TODO fix added edges to be correct
-       command_string := Format('SELECT ARRAY(SELECT topology.TopoGeo_addLinestring(%3$L,r.geom,%1$s)) FROM 
-                                 (SELECT geom from %2$s order by is_closed desc, num_points desc) as r', _topology_snap_tolerance, has_edges_temp_table_name, _topology_name);
-     ELSE
-       --< postgres, 2020-03-20 13:38:33 CET, resolve_cha, 2020-03-20 13:38:33.920 CET >ERROR:  cannot accumulate null arrays
-       --command_string := Format('SELECT ARRAY_AGG(topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L)) FROM (SELECT geom from %2$s order by is_closed desc, num_points desc) as r', _topology_snap_tolerance, has_edges_temp_table_name, ST_ExteriorRing (_bb), _topology_name, _table_name_result_prefix);
-       command_string := Format('SELECT topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L) FROM (SELECT geom from %2$s order by is_closed desc, num_points desc) as r', _topology_snap_tolerance, has_edges_temp_table_name, ST_ExteriorRing (_bb), _topology_name, _table_name_result_prefix);
-       
-     END IF;
-     EXECUTE command_string into line_edges_added;
-
-     command_string := Format('DROP TABLE IF EXISTS %s',has_edges_temp_table_name);
-     EXECUTE command_string;
-
-     command_string := Format('SELECT topo_update.do_healedges_no_block(%1$L,%2$L)', 
-     _topology_name, inner_cell_boundary_geom);
-     EXECUTE command_string;
-
--- >WARNING:  terminating connection because of crash of another server process at character 29
---< postgres, 2020-03-25 09:41:04 CET, resolve_cha, 2020-03-25 09:41:04.879 CET >DETAIL:  The postmaster has commanded this server process to roll back the current transaction and exit, because another server process exited abnormally and possibly corrupted shared memory.
---   Failes with      
---     command_string := Format('SELECT topo_update.heal_cellborder_edges_no_block(%1$L,%2$L,%3$L)', 
---      _topology_name, inner_cell_geom,null);
---     EXECUTE command_string;
-
+    -- Add cell borders to master table
+  
+    area_to_block := ST_expand(_bb,_topology_snap_tolerance);
+ 
+    command_string := Format('select count(*) from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L);', _job_list_name, area_to_block);
+    EXECUTE command_string INTO num_boxes_intersect;
+    command_string := Format('select count(*) from (select * from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) for update SKIP LOCKED) as r;', _job_list_name, area_to_block);
+    EXECUTE command_string INTO num_boxes_free;
+    IF num_boxes_intersect != num_boxes_free THEN
+      RAISE NOTICE 'Wait to handle add cell border edges for _cell_job_type %, num_boxes_intersect %, num_boxes_free %, for area_to_block % ',  
+      _cell_job_type, num_boxes_intersect, num_boxes_free, area_to_block;
+      RETURN;
     END IF;
-    
 
+    -- add cell border to master table
+    command_string := Format('SELECT topo_update.add_border_lines(%1$L,%4$L,%2$s,%3$L) ',
+    _topology_name, glue_snap_tolerance_fixed, _table_name_result_prefix, ST_ExteriorRing(_bb));
+    EXECUTE command_string;
+    
   ELSIF _cell_job_type = 3 THEN
-    -- on cell border
-    -- test with  area to block like _bb
-    -- area_to_block := _bb;
-    -- count the number of rows that intersects
+    -- Add inside line
 
---    command_string := Format('SELECT ST_Union(geom) from (SELECT ST_Expand(ST_Envelope(%1$s),%2$s) as geom from %3$s where ST_intersects(%1$s,%4$L) ) as r', 
- --   'geom', _topology_snap_tolerance, _topology_name||'.edge_data', _bb);
-
-    command_string := Format('SELECT ST_Expand(ST_Envelope(ST_collect(%1$s)),%2$s) from %3$s where ST_intersects(%1$s,%4$L);', 
-    input_table_geo_column_name, _topology_snap_tolerance, input_table_name, _bb);
-    
-    -- to much to block
---    command_string := Format('SELECT ST_Union(geom) from (select ST_collect(%1$s) as geom from %3$s where ST_intersects(%1$s,%4$L)) as r', 
---    input_table_geo_column_name, _topology_snap_tolerance, input_table_name, _bb);
---    does noe seems to help on permance
-
-    
---    command_string := Format('SELECT ST_Expand(ST_Envelope(ST_collect(%1$s)),%2$s) from %3$s where ST_intersects(%1$s,%4$L);', 
---    'geo', _topology_snap_tolerance, _table_name_result_prefix||'_border_line_segments', _bb);
--- causes dead lock    
-  
-    
-    EXECUTE command_string INTO area_to_block;
-    
-    --causes
-    
---    area_to_block = ST_Expand(_bb,_topology_snap_tolerance*2);
-    
-    
-  
-  
---CALL resolve_overlap_gap_single_cell(+| 26675 | active | transactionid
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26685 | active | transactionid
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26733 | active | tuple
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26693 | active | transactionid
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26696 | active | transactionid
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26744 | active | tuple
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26747 | active | [NULL]
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26711 | active | tuple
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26751 | active | tuple
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26715 | active | tuple
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26754 | active | tuple
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26719 | active | transactionid
---                                      |       |        | 
---CALL resolve_overlap_gap_single_cell(+| 26756 | active | transactionid
-    
-    IF area_to_block is NULL or ST_Area(area_to_block) = 0.0 THEN
-      area_to_block := _bb;
-    END IF;
-
+    area_to_block := ST_expand(_bb,_topology_snap_tolerance);
+ 
     command_string := Format('select count(*) from (select * from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) for update SKIP LOCKED) as r;', _job_list_name, area_to_block);
     EXECUTE command_string INTO num_boxes_free;
     
@@ -472,101 +388,26 @@ BEGIN
     END IF;
 
 
---  A test avoid un commented data updatinf and rollback if it fails
---    command_string := Format('select count(*) from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L);', _job_list_name, area_to_block);
---    EXECUTE command_string INTO num_boxes_intersect;
---    
---    command_string := Format('select count(*) from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) AND blocked_by_id is null;', _job_list_name, area_to_block);
---    EXECUTE command_string INTO num_boxes_free;
---
---    IF num_boxes_intersect != num_boxes_free THEN
---      RAISE NOTICE 'Wait to handle add cell border edges for stage 1 _cell_job_type %, num_boxes_intersect %, num_boxes_free %, for area_to_block % ',  
---      _cell_job_type, num_boxes_intersect, num_boxes_free, area_to_block;
---      RETURN;
---    END IF;
---
---    command_string := Format('update %1$s set blocked_by_id = %3$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) AND blocked_by_id is null;', 
---    _job_list_name, area_to_block, box_id);
---    EXECUTE command_string;
---    
---    GET DIAGNOSTICS updated_rows = ROW_COUNT;
---    
---    IF num_boxes_intersect != updated_rows THEN
---      RAISE NOTICE 'Wait to handle add cell border edges for stage 2 _cell_job_type %, num_boxes_intersect %, num_boxes_free %, for area_to_block % ',  
---      _cell_job_type, num_boxes_intersect, num_boxes_free, area_to_block;
---      ROLLBACK;
---      RETURN;
---    END IF;
---    
---    
---    COMMIT;
-
+    has_edges_temp_table_name := _topology_name||'.edge_data_tmp_' || box_id;
+    command_string := Format('SELECT EXISTS(SELECT 1 from to_regclass(%L) where to_regclass is not null)',has_edges_temp_table_name);
     
-    
-    border_topo_info.topology_name := _topology_name;
+    EXECUTE command_string into has_edges;
+    RAISE NOTICE 'cell % cell_job_type %, has_edges %, _loop_number %', box_id, _cell_job_type, has_edges, _loop_number;
+    IF (has_edges) THEN
+     IF _loop_number = 1 THEN 
+       command_string := Format('SELECT ARRAY(SELECT topology.TopoGeo_addLinestring(%3$L,r.geom,%1$s)) FROM 
+                                 (SELECT geom from %2$s order by is_closed desc, num_points desc) as r', _topology_snap_tolerance, has_edges_temp_table_name, _topology_name);
+     ELSE
+       command_string := Format('SELECT ARRAY_AGG(topo_update.add_border_lines(%4$L,r.geom,%1$s,%5$L)) FROM (SELECT geom from %2$s order by is_closed desc, num_points desc) as r', 
+                                 _topology_snap_tolerance, has_edges_temp_table_name, ST_ExteriorRing (_bb), _topology_name, _table_name_result_prefix);
+     END IF;
+     EXECUTE command_string into line_edges_added;
 
-    command_string := Format('CREATE TEMP table temp_left_over_borders as select geo FROM
-    (select (ST_Dump(ST_LineMerge(ST_Union(geo)))).geom as geo from topo_update.get_left_over_borders(%1$L,%2$L,%3$L,%4$L) as r) as r', 
-    overlapgap_grid, input_table_geo_column_name, _bb, _table_name_result_prefix,_topology_snap_tolerance*inner_cell_distance);
-    EXECUTE command_string;
-
-    
-    
-    
--- Try with out try catch     
---    IF _loop_number = 1 THEN 
---      command_string := Format('SELECT topology.TopoGeo_addLinestring(%1$L,geo,%2$s) from temp_left_over_borders order by ST_Length(geo) asc', 
---      _topology_name,snap_tolerance_fixed);
---      EXECUTE command_string;
---      
---      command_string := Format('SELECT topo_update.heal_cellborder_edges_no_block(%1$L,bb_geo) from temp_left_over_borders order by ST_Length(geo) asc', 
---      _topology_name);
---      EXECUTE command_string;
---      
---      command_string := Format('SELECT topology.TopoGeo_addLinestring(%1$L,r.geo,%3$s) from %7$s r where ST_StartPoint(r.geo) && %2$L', 
---      _topology_name, _bb, snap_tolerance_fixed, overlapgap_grid, 
---      _table_name_result_prefix, input_table_geo_column_name,
---      _table_name_result_prefix||'_border_line_many_points');
---      EXECUTE command_string;
---    ELSE
-
-      -- add border smale border lines
-      command_string := Format('SELECT topo_update.add_border_lines(%1$L,geo,%2$s,%3$L) from temp_left_over_borders group by geo order by ST_Length(geo) asc', 
-      _topology_name, snap_tolerance_fixed, _table_name_result_prefix);
-      EXECUTE command_string;
-
-      EXECUTE command_string into line_edges_added;
-      RAISE NOTICE 'Added edges for border lines for box % into line_edges_added %',  box_id, line_edges_added;
-     
-      -- add very long lines
-      -- TODO find what to with lines related to heal, and smooting if we keep it this way
-      command_string := Format('SELECT topo_update.add_border_lines(%1$L,r.geo,%3$s,%5$L) from %7$s r where ST_StartPoint(r.geo) && %2$L' , 
-      _topology_name, _bb, snap_tolerance_fixed, overlapgap_grid, 
-      _table_name_result_prefix, input_table_geo_column_name,
-      _table_name_result_prefix||'_border_line_many_points');
-      EXECUTE command_string;
---    END IF;
-
-   
-
-    drop table temp_left_over_borders;
-    
-
-    command_string := Format('update %1$s set blocked_by_id = null where cell_geo && %2$L and ST_intersects(cell_geo,%2$L);', 
-    _job_list_name, area_to_block);
-    EXECUTE command_string;
-
+     command_string := Format('DROP TABLE IF EXISTS %s',has_edges_temp_table_name);
+     EXECUTE command_string;
+   END IF;
      
   ELSIF _cell_job_type = 4 THEN
-
---    command_string := Format('SELECT ST_Expand(ST_Envelope(ST_collect(%1$s)),%2$s) from %3$s where ST_intersects(%1$s,%4$L);', 
---    input_table_geo_column_name, _topology_snap_tolerance, input_table_name, _bb);
-    
---    command_string := Format('SELECT ST_Expand(ST_Envelope(ST_collect(%1$s)),%2$s) from %3$s where ST_intersects(%1$s,%4$L);', 
---    'geom', _topology_snap_tolerance, _topology_name||'.edge_data', _bb);
-    
---    command_string := Format('SELECT ST_Union(geom) from (select ST_collect(%1$s) as geom from %3$s where ST_intersects(%1$s,%4$L)) as r', 
- --   'mbr', _topology_snap_tolerance, _topology_name||'.face', _bb);
 
     command_string := Format('SELECT ST_Union(geom) from (select ST_Expand(ST_Envelope(%1$s),%2$s) as geom from %3$s where ST_intersects(%1$s,%4$L) ) as r', 
     'geom', _topology_snap_tolerance, _topology_name||'.edge_data', _bb);
