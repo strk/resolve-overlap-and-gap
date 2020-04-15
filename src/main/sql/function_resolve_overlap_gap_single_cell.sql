@@ -373,8 +373,14 @@ BEGIN
   ELSIF _cell_job_type = 3 THEN
     -- Add inside line
 
-    area_to_block := ST_expand(_bb,_topology_snap_tolerance);
- 
+    command_string := Format('SELECT ST_Expand(ST_Envelope(ST_collect(%1$s)),%2$s) from %3$s where ST_intersects(%1$s,%4$L);', 
+    input_table_geo_column_name, _topology_snap_tolerance, input_table_name, _bb);
+    EXECUTE command_string INTO area_to_block;
+
+    IF area_to_block is NULL or ST_Area(area_to_block) = 0.0 THEN
+      area_to_block := _bb;
+    END IF;
+
     command_string := Format('select count(*) from (select * from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) for update SKIP LOCKED) as r;', _job_list_name, area_to_block);
     EXECUTE command_string INTO num_boxes_free;
     
@@ -419,24 +425,24 @@ BEGIN
       area_to_block := _bb;
     END IF;
 
-     command_string := Format('select count(*) from (select * from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) for update SKIP LOCKED) as r;', _job_list_name, area_to_block);
-     EXECUTE command_string INTO num_boxes_free;
+    command_string := Format('select count(*) from (select * from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) for update SKIP LOCKED) as r;', _job_list_name, area_to_block);
+    EXECUTE command_string INTO num_boxes_free;
     
-     command_string := Format('select count(*) from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L);', _job_list_name, area_to_block);
-     EXECUTE command_string INTO num_boxes_intersect;
+    command_string := Format('select count(*) from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L);', _job_list_name, area_to_block);
+    EXECUTE command_string INTO num_boxes_intersect;
     
-     IF num_boxes_intersect != num_boxes_free THEN
+    IF num_boxes_intersect != num_boxes_free THEN
       RAISE NOTICE 'Wait to handle add cell border edges for _cell_job_type %, num_boxes_intersect %, num_boxes_free %, for area_to_block % ',  
       _cell_job_type, num_boxes_intersect, num_boxes_free, area_to_block;
       RETURN;
-     END IF;
+    END IF;
 
-     -- Remove cell borders added in step one
-     command_string := Format('select ST_RemEdgeNewFace(%1$L, edge_id) 
+    -- Remove cell borders added in step one
+    command_string := Format('select ST_RemEdgeNewFace(%1$L, edge_id) 
       from  %1$s.edge_data where ST_CoveredBy(geom,%2$L)',
       _topology_name,
       ST_ExteriorRing(_bb));
-     EXECUTE command_string;
+    EXECUTE command_string;
 
 
   ELSIF _cell_job_type = 5 THEN
