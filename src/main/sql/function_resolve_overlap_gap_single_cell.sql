@@ -435,10 +435,16 @@ BEGIN
 
     -- Remove cell borders added in step one
     -- NB! we need to find to be sure that this edges is not from the orignal data set.
-    command_string := Format('select ST_RemEdgeNewFace(%1$L, edge_id) 
-      from  %1$s.edge_data where ST_CoveredBy(geom,%2$L)',
+    command_string := Format('select ST_RemEdgeNewFace(%1$L, e2.edge_id) from 
+      (select distinct e.edge_id 
+      from  %1$s.edge_data e ,
+      (select ST_intersection(%2$L,%3$s) as geom from %4$s where ST_intersects(%2$L,%3$s)) b
+      where ST_CoveredBy(e.geom,%2$L) and NOT ST_CoveredBy(e.geom,b.geom) ) as e2',
       _topology_name,
-      ST_ExteriorRing(_bb));
+      ST_ExteriorRing(_bb),
+      input_table_geo_column_name,
+      input_table_name);
+      
     EXECUTE command_string;
 
 
