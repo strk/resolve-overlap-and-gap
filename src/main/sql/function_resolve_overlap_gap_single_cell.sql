@@ -405,13 +405,20 @@ BEGIN
 
      command_string := Format('DROP TABLE IF EXISTS %s',has_edges_temp_table_name);
      EXECUTE command_string;
-   END IF;
+    END IF;
 
-   ELSIF _cell_job_type = 4 THEN
+  ELSIF _cell_job_type = 4 THEN
+    -- Remove cell borders added in step one
+
    
-   
-     area_to_block := ST_expand(_bb,_topology_snap_tolerance);
- 
+    command_string := Format('SELECT ST_Expand(ST_Envelope(ST_collect(%1$s)),%2$s) from %3$s where ST_intersects(%1$s,%4$L);', 
+    input_table_geo_column_name, _topology_snap_tolerance, input_table_name, _bb);
+    EXECUTE command_string INTO area_to_block;
+
+    IF area_to_block is NULL or ST_Area(area_to_block) = 0.0 THEN
+      area_to_block := _bb;
+    END IF;
+
      command_string := Format('select count(*) from (select * from %1$s where cell_geo && %2$L and ST_intersects(cell_geo,%2$L) for update SKIP LOCKED) as r;', _job_list_name, area_to_block);
      EXECUTE command_string INTO num_boxes_free;
     
@@ -433,7 +440,6 @@ BEGIN
 
 
   ELSIF _cell_job_type = 5 THEN
-    -- Remove cell borders added in step one
     -- Heal crossing line and simplify them
   
     command_string := Format('SELECT ST_Union(geom) from (select ST_Expand(ST_Envelope(%1$s),%2$s) as geom from %3$s where ST_intersects(%1$s,%4$L) ) as r', 
