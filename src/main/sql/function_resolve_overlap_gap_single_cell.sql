@@ -364,7 +364,7 @@ BEGIN
       _cell_job_type, num_boxes_intersect, num_boxes_free, area_to_block;
       RETURN;
     END IF;
-
+	
     -- add cell border to master table
     command_string := Format('SELECT topo_update.add_border_lines(%1$L,%4$L,%2$s,%3$L) ',
     _topology_name, glue_snap_tolerance_fixed, _table_name_result_prefix, ST_ExteriorRing(_bb));
@@ -438,6 +438,7 @@ BEGIN
     END IF;
 
     -- Remove cell borders added in step one
+    -- NB! we need to find to be sure that this edges is not from the orignal data set.
     command_string := Format('select ST_RemEdgeNewFace(%1$L, edge_id) 
       from  %1$s.edge_data where ST_CoveredBy(geom,%2$L)',
       _topology_name,
@@ -446,7 +447,7 @@ BEGIN
 
 
   ELSIF _cell_job_type = 5 THEN
-    -- Heal crossing line and simplify them
+    -- Simplify crossing line 
   
     command_string := Format('SELECT ST_Union(geom) from (select ST_Expand(ST_Envelope(%1$s),%2$s) as geom from %3$s where ST_intersects(%1$s,%4$L) ) as r', 
     'geom', _topology_snap_tolerance, _topology_name||'.edge_data', _bb);
