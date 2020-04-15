@@ -373,10 +373,6 @@ BEGIN
   ELSIF _cell_job_type = 3 THEN
     -- Add inside line
 
-    command_string := Format('SELECT ST_Expand(ST_Envelope(ST_collect(%1$s)),%2$s) from %3$s where ST_intersects(%1$s,%4$L);', 
-    input_table_geo_column_name, _topology_snap_tolerance, input_table_name, _bb);
-    EXECUTE command_string INTO area_to_block;
-
     IF area_to_block is NULL or ST_Area(area_to_block) = 0.0 THEN
       area_to_block := _bb;
     END IF;
