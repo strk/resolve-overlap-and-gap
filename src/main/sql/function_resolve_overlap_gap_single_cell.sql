@@ -435,16 +435,45 @@ BEGIN
 
     -- Remove cell borders added in step one
     -- NB! we need to find to be sure that this edges is not from the orignal data set.
-    command_string := Format('select ST_RemEdgeNewFace(%1$L, e2.edge_id) from 
-      (select distinct e.edge_id 
-      from  %1$s.edge_data e ,
-      (select ST_intersection(%2$L,%3$s) as geom from %4$s where ST_intersects(%2$L,%3$s)) b
-      where ST_CoveredBy(e.geom,%2$L) and NOT ST_CoveredBy(e.geom,b.geom) ) as e2',
+    IF _utm THEN
+      command_string := Format('select ST_RemEdgeNewFace(%1$L, e3.edge_id) from (
+      select distinct e2.edge_id 
+      from  
+      %1$s.edge_data e2
+      where ST_CoveredBy(e2.geom,%2$L) and
+      exists 
+       (select 1 
+       from  
+       %1$s.edge_data e1 ,
+       %4$s o
+       where e1.edge_id = e2.edge_id and ST_Intersects(o.%3$s,%2$L) and ST_Length(ST_Intersection(o.%3$s, e1.geom)) < %5$s )
+      ) as e3'
+      ,
       _topology_name,
-      ST_ExteriorRing(_bb),
+      ST_buffer(ST_ExteriorRing(_bb),_topology_snap_tolerance),
       input_table_geo_column_name,
-      input_table_name);
-      
+      input_table_name,
+      _topology_snap_tolerance);
+    ELSE
+      command_string := Format('select ST_RemEdgeNewFace(%1$L, e3.edge_id) from (
+      select distinct e2.edge_id 
+      from  
+      %1$s.edge_data e2
+      where ST_CoveredBy(e2.geom,%2$L) and
+      exists 
+       (select 1 
+       from  
+       %1$s.edge_data e1 ,
+       %4$s o
+       where e1.edge_id = e2.edge_id and ST_Intersects(o.%3$s,%2$L) and ST_Length(ST_Intersection(o.%3$s, e1.geom),true) < %5$s )
+      ) as e3',
+      _topology_name,
+      ST_buffer(ST_ExteriorRing(_bb),_topology_snap_tolerance),
+      input_table_geo_column_name,
+      input_table_name,
+      _topology_snap_tolerance);
+     END IF;
+  
     EXECUTE command_string;
 
 
