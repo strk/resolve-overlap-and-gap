@@ -39,7 +39,6 @@ DECLARE
   -- This is used when adding lines hte tolrannce is different when adding lines inside and box and the border;
   snap_tolerance_fixed float = _topology_snap_tolerance;
   glue_snap_tolerance_fixed float = _topology_snap_tolerance/10000;
-  min_length_line float = (_clean_info).min_area_to_keep/1000;
   temp_table_name varchar;
   temp_table_id_column varchar;
   final_result_table_name varchar;
@@ -126,8 +125,8 @@ BEGIN
   -- RAISE NOTICE 'area to block:% ', area_to_block;
   border_topo_info.snap_tolerance := _topology_snap_tolerance;
   
-  RAISE NOTICE 'start work at timeofday:% for layer %, _topology_snap_tolerance %, with _cell_job_type % and min_length_line %s, (_clean_info).chaikins_max_degrees) %', 
-  Timeofday(), _topology_name || '_' || box_id, _topology_snap_tolerance, _cell_job_type, min_length_line, (_clean_info).chaikins_max_degrees;
+  RAISE NOTICE 'start work at timeofday:% for layer %, _topology_snap_tolerance %, with _cell_job_type % and (_clean_info).chaikins_max_degrees) %', 
+  Timeofday(), _topology_name || '_' || box_id, _topology_snap_tolerance, _cell_job_type, (_clean_info).chaikins_max_degrees;
   
       -- check if any 'SubtransControlLock' is there
         subtransControlLock_start = clock_timestamp();
@@ -160,31 +159,14 @@ BEGIN
     
   IF _cell_job_type = 1 THEN
   
-    -- get the siple feature data both the line_types and the inner lines.
+    -- get the siple feature data both the line_types and the inner lines.	
     -- the boundery linnes are saved in a table for later usage
-    command_string := Format('create temp table tmp_simplified_border_lines_1 as 
-    (select g.* , ST_NPoints(geo) as num_points, ST_IsClosed(geo) as is_closed  
-     FROM topo_update.get_simplified_border_lines(%L,%L,%L,%L,%L) g)', 
+    command_string := Format('create temp table tmp_simplified_border_lines as 
+    (select g.*  FROM topo_update.get_simplified_border_lines(%L,%L,%L,%L,%L) g)', 
     input_table_name, input_table_geo_column_name, _bb, _topology_snap_tolerance, _table_name_result_prefix);
     EXECUTE command_string ;
-    
-    EXECUTE Format('CREATE INDEX ON tmp_simplified_border_lines_1(is_closed)');
-    
-    IF (_utm = false) THEN
-      create temp table tmp_simplified_border_lines as 
-      (select * from tmp_simplified_border_lines_1 where 
-      is_closed = false or 
-      (ST_Area(ST_Envelope(geo),true) > (_clean_info).min_area_to_keep and ST_Area(ST_MakePolygon(geo),true) > (_clean_info).min_area_to_keep)); 
-    ELSE
-      create temp table tmp_simplified_border_lines as 
-      (select * from tmp_simplified_border_lines_1 where 
-      is_closed = false or 
-      (ST_Area(ST_Envelope(geo)) > (_clean_info).min_area_to_keep and ST_Area(ST_MakePolygon(geo)) > (_clean_info).min_area_to_keep)); 
-    END IF;
 
-    DROP TABLE tmp_simplified_border_lines_1;
-
-    EXECUTE Format('CREATE INDEX ON tmp_simplified_border_lines(is_closed,num_points)');
+--    EXECUTE Format('CREATE INDEX ON tmp_simplified_border_lines(is_closed,num_points)');
 
 --    IF _loop_number = 1 THEN 
 --       RAISE NOTICE 'use _topology_name %', _topology_name;
@@ -237,14 +219,14 @@ BEGIN
     -- using the input tolreance for adding
     border_topo_info.snap_tolerance := snap_tolerance_fixed;
     command_string := Format('SELECT topo_update.add_border_lines(%1$L,r.geom,%2$s,%3$L) 
-                              FROM (select geo as geom from tmp_simplified_border_lines g where line_type = 0) as r',
+ 	                             FROM (select geo as geom from tmp_simplified_border_lines g where ST_NPoints(geo) > 1) as r ',
     border_topo_info.topology_name, border_topo_info.snap_tolerance, _table_name_result_prefix);
     EXECUTE command_string;
 
     command_string := Format('SELECT topo_update.do_healedges_no_block(%1$L,%2$L)', 
     border_topo_info.topology_name,_bb);
     EXECUTE command_string;
-    
+  
     command_string = null;
     
     IF (_clean_info).simplify_tolerance > 0  THEN
@@ -284,7 +266,7 @@ BEGIN
           END LOOP;
         END IF;
     END IF;
-    
+ 
     IF (_clean_info).chaikins_nIterations > 0 THEN
       command_string := Format('SELECT topo_update.try_ST_ChangeEdgeGeom(e.geom,%1$L,%6$L,%3$L,e.edge_id, 
       ST_simplifyPreserveTopology(topo_update.chaikinsAcuteAngle(e.geom,%3$L,%4$L), %5$s)) 
@@ -303,15 +285,16 @@ BEGIN
       border_topo_info.topology_name, inner_cell_geom, _utm, _clean_info,_topology_snap_tolerance/2, (_clean_info).simplify_max_average_vertex_length);
       EXECUTE command_string;
     END IF;
-     
-
+ 
+    
+ 
     IF (_clean_info).chaikins_nIterations > 0 OR (_clean_info).simplify_tolerance > 0 THEN
       face_table_name = border_topo_info.topology_name || '.face';
       start_time_delta_job := Clock_timestamp();
       RAISE NOTICE 'Start clean small polygons for face_table_name % at %', face_table_name, Clock_timestamp();
       -- remove small polygons in temp
       num_rows_removed := topo_update.do_remove_small_areas_no_block (
-      border_topo_info.topology_name, (_clean_info).min_area_to_keep, face_table_name, _bb,_utm);
+      border_topo_info.topology_name, (_clean_info).min_area_to_keep, face_table_name, inner_cell_geom,_utm);
     
       used_time := (Extract(EPOCH FROM (Clock_timestamp() - start_time_delta_job)));
       RAISE NOTICE 'Removed % clean small polygons for face_table_name % at % used_time: %', num_rows_removed, face_table_name, Clock_timestamp(), used_time;
@@ -321,9 +304,7 @@ BEGIN
       border_topo_info.topology_name,outer_cell_boundary_geom);
       EXECUTE command_string;
     END IF;
-
-    
-    
+   
     command_string := Format('SELECT EXISTS(SELECT 1 from  %1$s.edge limit 1)',
     border_topo_info.topology_name);
 
@@ -769,3 +750,15 @@ BEGIN
 END
 $$;
 
+--truncate table test_topo_ar50_t11.ar50_utvikling_flate_job_list_donejobs;
+--drop table test_topo_ar50_t11.edge_data_tmp_121;
+--drop table tmp_simplified_border_lines_121 ;
+
+--CALL resolve_overlap_gap_single_cell(
+--  'sl_esh.ar50_utvikling_flate','geo','sl_sdeid','test_topo_ar50_t11.ar50_utvikling_flate',
+--  'test_topo_ar50_t11',1,25833,'true',
+--  '(300,9,500,3,140,120,240,3,35)',
+--  'test_topo_ar50_t11.ar50_utvikling_flate_job_list','test_topo_ar50_t11.ar50_utvikling_flate_grid',
+--  '0103000020E9640000010000000500000000000000084507410000004006F45A4100000000084507410000008013F75A4100000000B0A607410000008013F75A4100000000B0A607410000004006F45A4100000000084507410000004006F45A41'
+--  ,1,1);
+  

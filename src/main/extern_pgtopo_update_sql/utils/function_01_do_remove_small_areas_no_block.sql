@@ -20,7 +20,7 @@ DECLARE
 BEGIN
   command_string := Format('select sum(topo_update.removes_tiny_polygons(%1$s,face_id,topo_area,%2$s)) 
  	  from ( 
- 		select g.*, topo_update.get_face_area(%1$s,face_id, %6$L) as topo_area 
+ 		select g.*, topo_update.get_face_area(%1$s,face_id, %6$L,%4$L) as topo_area 
  		from (
  			select g.* FROM (
                 SELECT CASE 

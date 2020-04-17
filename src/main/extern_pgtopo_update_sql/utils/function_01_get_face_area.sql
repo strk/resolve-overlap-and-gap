@@ -1,7 +1,7 @@
 /**
  * Get face area in meter, exception return 0
  */
-CREATE OR REPLACE FUNCTION topo_update.get_face_area(_atopology varchar, _face_id int, utm boolean)
+CREATE OR REPLACE FUNCTION topo_update.get_face_area(_atopology varchar, _face_id int, utm boolean, _bb Geometry)
   RETURNS float
   AS $$
 DECLARE
@@ -13,20 +13,27 @@ DECLARE
   v_detail text;
   v_hint text;
   v_context text;
+  geo Geometry;
 
 BEGIN
   BEGIN
+	geo = st_getFaceGeometry (_atopology, _face_id);
+	
+	IF _bb is not null and NOT ST_CoveredBy(geo,_bb) THEN
+	  RETURN null;
+	END IF;
+	
 	IF (utm = false) THEN
       face_area := ST_Area (st_getFaceGeometry (_atopology, _face_id), TRUE);
     ELSE
       face_area := ST_Area (st_getFaceGeometry (_atopology, _face_id)); 
     END IF;
   	EXCEPTION WHEN OTHERS THEN
-	    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT, v_detail = PG_EXCEPTION_DETAIL, v_hint = PG_EXCEPTION_HINT,
+	  GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_msg = MESSAGE_TEXT, v_detail = PG_EXCEPTION_DETAIL, v_hint = PG_EXCEPTION_HINT,
                     v_context = PG_EXCEPTION_CONTEXT;
-        RAISE NOTICE 'Failed failed to area for face_id % in topo % state  : %  message: % detail : % hint   : % context: %', 
+      RAISE NOTICE 'Failed failed to area for face_id % in topo % state  : %  message: % detail : % hint   : % context: %', 
         _face_id, _atopology, v_state, v_msg, v_detail, v_hint, v_context;
-  face_area := 0;
+      face_area := null;
     END;
   RETURN face_area;
 END;
